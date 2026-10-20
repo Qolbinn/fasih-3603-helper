@@ -313,23 +313,29 @@ class DataCleaningEngine:
             return False
         return True
 
-    def _handle_relogin_needed(self, page, context, row_idx=None, nama_usaha=None):
+    def _handle_relogin_needed(self, page, context, row_idx=None, nama_usaha=None, is_midrun=False):
         """
         Menangani kondisi sesi Fasih SSO kedaluwarsa atau belum login.
         Menampilkan browser ke depan, memancarkan event auth_waiting,
         dan menunggu pengguna login kembali (didukung auto-detect atau klik tombol konfirmasi).
         Mengembalikan tab aktif yang sudah terotentikasi, atau None jika dibatalkan/dihentikan.
         """
-        prefix = f"Baris {row_idx} [{nama_usaha}]" if row_idx else "Pemeriksaan Sesi Awal"
-        logger.warning(f"⚠️ {prefix}: Sesi Fasih SSO kedaluwarsa / belum aktif. Menampilkan jendela Chrome...")
+        if is_midrun and row_idx:
+            prefix = f"Baris {row_idx} [{nama_usaha}]"
+            msg = f"Sesi Fasih kedaluwarsa di tengah jalan saat memproses {prefix}. Silakan login kembali di Google Chrome, lalu klik '🟢 Saya Sudah Login'."
+            logger.warning(f"⚠️ {prefix}: Sesi Fasih SSO kedaluwarsa di tengah jalan! Menjeda & menampilkan Google Chrome...")
+        else:
+            prefix = "Pemeriksaan Sesi Awal"
+            msg = "Sesi Fasih SSO belum terdeteksi. Silakan login SSO BPS & OTP di Google Chrome, lalu klik '🟢 Saya Sudah Login'."
+            logger.warning(f"⚠️ {prefix}: Sesi Fasih SSO belum aktif. Menampilkan jendela Google Chrome...")
+
         WindowController.restore_and_focus_browser()
 
         # Reset flag konfirmasi manual sebelumnya
         self.event_bus.reset_auth_confirmation()
 
-        msg = f"Sesi Fasih kedaluwarsa saat memproses {prefix}. Silakan login SSO BPS & OTP di Google Chrome (atau klik '🟢 Saya Sudah Login')."
-        self.event_bus.emit("auth_waiting", {"message": msg})
-        logger.info("Menunggu Anda menyelesaikan login SSO BPS & OTP di browser Chrome...")
+        self.event_bus.emit("auth_waiting", {"message": msg, "is_midrun": is_midrun, "row_idx": row_idx})
+        logger.info(f"Menunggu Anda login SSO BPS di Google Chrome ({'Mid-Run Baris ' + str(row_idx) if is_midrun else 'Awal'})...")
 
         active_page = page
         while True:
@@ -340,13 +346,15 @@ class DataCleaningEngine:
 
             # 2. Periksa konfirmasi manual dari tombol UI '🟢 Saya Sudah Login'
             if self.event_bus.is_auth_confirmed():
-                logger.success("🟢 Konfirmasi login diterima dari tombol UI. Memeriksa tab browser...")
+                logger.success("🟢 Konfirmasi login diterima dari pengguna! Memeriksa tab browser...")
                 detected = BrowserManager.find_authenticated_page(context)
                 if detected:
                     active_page = detected
+                elif not active_page or active_page.is_closed():
+                    active_page = context.pages[0] if context.pages else None
                 break
 
-            # 3. Pindai secara dinamis tab aktif atau tab lain yang terbuka di context
+            # 3. Pindai secara dinamis tab aktif atau tab lain yang terbuka di context (Auto-detect)
             try:
                 if active_page and not active_page.is_closed():
                     if BrowserManager.is_page_logged_in(active_page) and not BrowserManager.is_session_expired(active_page):
@@ -361,33 +369,23 @@ class DataCleaningEngine:
                 logger.success("✅ Login SSO Fasih berhasil dideteksi otomatis pada tab browser!")
                 break
 
-            time.sleep(1.0)
+            time.sleep(0.5)
 
         if self.event_bus.is_stop_requested():
             return None
 
-        # Stabilisasi redirect pasca login SSO
-        logger.info("Menunggu browser menyelesaikan stabilisasi sesi login SSO...")
-        for _ in range(20):
-            if self.event_bus.is_stop_requested():
-                return None
-            try:
-                if active_page and not active_page.is_closed():
-                    curr_url = active_page.url.lower()
-                    if "oauth2" not in curr_url and "sso.bps.go.id" not in curr_url and not BrowserManager.is_session_expired(active_page):
-                        break
-            except Exception:
-                pass
-            time.sleep(0.5)
+        # Reset flag konfirmasi
+        self.event_bus.reset_auth_confirmation()
 
-        try:
-            if active_page and not active_page.is_closed():
-                active_page.wait_for_load_state("domcontentloaded", timeout=5000)
-        except Exception:
-            pass
-        time.sleep(1.0)
+        # Pastikan active_page masih valid
+        if not active_page or active_page.is_closed():
+            active_page = BrowserManager.find_authenticated_page(context)
+            if not active_page and context.pages:
+                active_page = context.pages[0]
 
-        self.event_bus.emit("auth_success", {})
+        time.sleep(0.5)
+        logger.success(f"🟢 Sesi Fasih aktif! Melanjutkan proses otomasi...")
+        self.event_bus.emit("auth_success", {"is_midrun": is_midrun, "row_idx": row_idx})
 
         if self.auto_minimize:
             WindowController.minimize_browser()
@@ -480,9 +478,9 @@ class DataCleaningEngine:
                     except Exception:
                         pass
 
-        # Jika masih belum terotentikasi atau sesi habis, masuki sesi tunggu login
+        # Pengecekan 1: Di awal running ketika belum terotentikasi atau sesi belum terdeteksi
         if not BrowserManager.is_page_logged_in(page) or BrowserManager.is_session_expired(page):
-            page = self._handle_relogin_needed(page, context)
+            page = self._handle_relogin_needed(page, context, is_midrun=False)
             if not page or self.event_bus.is_stop_requested():
                 logger.warning("Otomasi dibatalkan sebelum login SSO selesai.")
                 browser.close()
@@ -617,21 +615,21 @@ class DataCleaningEngine:
 
                     random_sleep(1.5, 2.5, event_bus=self.event_bus)
 
-                    # Cek sesi SSO di tengah jalan
+                    # Pengecekan 2: Di tengah-tengah running ketika terdeteksi sesi habis
                     if BrowserManager.is_session_expired(page) or not BrowserManager.is_page_logged_in(page):
-                        page = self._handle_relogin_needed(page, context, row_idx=row_idx, nama_usaha=nama_usaha)
+                        page = self._handle_relogin_needed(page, context, row_idx=row_idx, nama_usaha=nama_usaha, is_midrun=True)
                         if not page or self.event_bus.is_stop_requested():
                             audit_data["status"] = "DIHENTIKAN"
-                            audit_data["keterangan"] = "Dihentikan oleh pengguna saat menunggu login SSO"
+                            audit_data["keterangan"] = "Dihentikan oleh pengguna saat sesi login kedaluwarsa"
                             self.event_bus.emit("row_completed", {
                                 "row_idx": row_idx,
                                 "status": "⏹️ DIHENTIKAN",
-                                "keterangan": "Dihentikan oleh pengguna saat menunggu login SSO"
+                                "keterangan": "Dihentikan oleh pengguna saat sesi login kedaluwarsa"
                             })
                             break
 
                         # KRUSIAL: Muat ulang URL penugasan baris ini karena setelah login browser berada di halaman redirect SSO
-                        logger.info(f"🔄 Memuat ulang formulir penugasan Baris {row_idx} [{nama_usaha}]...")
+                        logger.info(f"🔄 Sesi pulih! Memuat ulang formulir penugasan Baris {row_idx} [{nama_usaha}]...")
                         page.goto(raw_url, timeout=45000, wait_until="domcontentloaded")
                         random_sleep(1.5, 2.5, event_bus=self.event_bus)
 
@@ -646,17 +644,17 @@ class DataCleaningEngine:
                     except Exception as blok2_err:
                         # Jika elemen Blok II tidak muncul, periksa apakah sesi Fasih tiba-tiba habis
                         if BrowserManager.is_session_expired(page) or not BrowserManager.is_page_logged_in(page):
-                            page = self._handle_relogin_needed(page, context, row_idx=row_idx, nama_usaha=nama_usaha)
+                            page = self._handle_relogin_needed(page, context, row_idx=row_idx, nama_usaha=nama_usaha, is_midrun=True)
                             if not page or self.event_bus.is_stop_requested():
                                 audit_data["status"] = "DIHENTIKAN"
-                                audit_data["keterangan"] = "Dihentikan oleh pengguna saat menunggu login SSO"
+                                audit_data["keterangan"] = "Dihentikan oleh pengguna saat sesi login kedaluwarsa"
                                 self.event_bus.emit("row_completed", {
                                     "row_idx": row_idx,
                                     "status": "⏹️ DIHENTIKAN",
-                                    "keterangan": "Dihentikan oleh pengguna saat menunggu login SSO"
+                                    "keterangan": "Dihentikan oleh pengguna saat sesi login kedaluwarsa"
                                 })
                                 break
-                            logger.info(f"🔄 Memuat ulang formulir penugasan Baris {row_idx} [{nama_usaha}] setelah re-login...")
+                            logger.info(f"🔄 Sesi pulih! Memuat ulang formulir penugasan Baris {row_idx} [{nama_usaha}] setelah re-login...")
                             page.goto(raw_url, timeout=45000, wait_until="domcontentloaded")
                             random_sleep(1.5, 2.5, event_bus=self.event_bus)
                             try:

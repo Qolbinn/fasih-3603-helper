@@ -764,14 +764,26 @@ class DataCleaningView(ctk.CTkFrame):
 
             elif ev_type == "auth_waiting":
                 msg = payload.get("message", "Silakan login SSO BPS & OTP di jendela Google Chrome.")
-                self.lbl_active_row.configure(text=f"🔑 [Login SSO Diperlukan] {msg}")
+                is_mid = payload.get("is_midrun", False)
+                r_idx = payload.get("row_idx")
+                if is_mid and r_idx:
+                    self.lbl_active_row.configure(text=f"🔑 [Sesi Habis di Baris {r_idx}] {msg}")
+                    self.btn_confirm_auth.configure(text="🟢 Saya Sudah Login Kembali")
+                else:
+                    self.lbl_active_row.configure(text=f"🔑 [Login SSO Diperlukan] {msg}")
+                    self.btn_confirm_auth.configure(text="🟢 Saya Sudah Login (Lanjutkan)")
                 if not self.btn_confirm_auth.winfo_ismapped():
                     self.btn_confirm_auth.pack(side="left", padx=(0, 8))
 
             elif ev_type == "auth_success":
                 if self.btn_confirm_auth.winfo_ismapped():
                     self.btn_confirm_auth.pack_forget()
-                self.lbl_active_row.configure(text="🟢 Login SSO Fasih aktif. Melanjutkan pembersihan data...")
+                is_mid = payload.get("is_midrun", False)
+                r_idx = payload.get("row_idx")
+                if is_mid and r_idx:
+                    self.lbl_active_row.configure(text=f"🟢 Sesi pulih! Memuat ulang Baris {r_idx}...")
+                else:
+                    self.lbl_active_row.configure(text="🟢 Login SSO Fasih aktif. Memulai pemrosesan data...")
 
             elif ev_type == "auth_required":
                 messagebox.showwarning("Perhatian SSO", payload["message"])

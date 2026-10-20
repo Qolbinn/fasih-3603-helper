@@ -88,20 +88,21 @@ class BrowserManager:
         Memeriksa apakah halaman saat ini menunjukkan sesi telah kedaluwarsa atau belum login.
 
         Karakteristik Sesi Kedaluwarsa / Belum Login di Fasih BPS:
-        1. URL diarahkan ke halaman login root:
-           https://fasih-sm.bps.go.id/app atau https://fasih-sm.bps.go.id/app/
-        2. URL berada di subdomain SSO atau halaman login auth:
-           sso.bps.go.id, /auth/login, /login, keycloak, dsb.
-        3. DOM mengandung tombol / teks login:
-           - "Lanjutkan dengan SSO"
-           - "Selamat Datang Kembali"
-           - "Masuk ke akun Anda"
-           - Form login SSO / Keycloak
+        1. URL berada di domain SSO BPS: sso.bps.go.id
+        2. URL berada di path auth login: /auth/login atau /login
+        3. Elemen DOM login terlihat:
+           - Teks / tombol: "Lanjutkan dengan SSO"
+           - Teks: "Selamat Datang Kembali"
+           - Subtitle: "Masuk ke akun Anda"
+           - Form SSO Keycloak: #kc-form-login
         """
         try:
+            if not page or page.is_closed():
+                return False
+
             url = page.url.lower().strip()
             if not url or url == "about:blank":
-                return False
+                return True
 
             parsed = urlparse(url)
             netloc = parsed.netloc.lower()
@@ -111,25 +112,27 @@ class BrowserManager:
             if "sso.bps.go.id" in netloc or "sso" in netloc:
                 return True
 
-            # 2. Cek jika di domain fasih-sm.bps.go.id tapi berada di path login/auth
-            if "fasih-sm.bps.go.id" in netloc:
-                # Path login root Fasih: /app, /app/auth/login, atau root /
-                if path in ["/app", ""]:
-                    return True
-                if "/auth/login" in path or path.endswith("/login"):
-                    return True
+            # 2. Cek jika berada di path auth login
+            if "/auth/login" in path or path.endswith("/login"):
+                return True
 
             # 3. Pengecekan elemen DOM spesifik halaman login Fasih
             login_indicators = [
+                "a:has-text('Lanjutkan dengan SSO')",
+                "button:has-text('Lanjutkan dengan SSO')",
+                "span:has-text('Lanjutkan dengan SSO')",
                 "text='Lanjutkan dengan SSO'",
+                "h1:has-text('Selamat Datang Kembali')",
                 "text='Selamat Datang Kembali'",
+                "dd:has-text('Masuk ke akun Anda')",
                 "a[href*='/auth/login']",
                 "#kc-form-login",
                 "#kc-login"
             ]
             for sel in login_indicators:
                 try:
-                    if page.locator(sel).first.count() > 0:
+                    loc = page.locator(sel).first
+                    if loc.count() > 0 and loc.is_visible():
                         return True
                 except Exception:
                     pass
@@ -144,11 +147,15 @@ class BrowserManager:
         Memeriksa apakah halaman page sedang dalam sesi login Fasih yang sah (bukan SSO/login).
 
         Aturan Fasih BPS:
-        1. URL Login: https://fasih-sm.bps.go.id/app (atau halaman SSO sso.bps.go.id).
-        2. URL Setelah Login: Fasih otomatis me-redirect ke:
-           https://fasih-sm.bps.go.id/app/surveys... atau /app/assignment/..., /monitoring, dll.
+        1. Harus berada di domain fasih-sm.bps.go.id.
+        2. TIDAK boleh berada di SSO BPS atau path /auth/login.
+        3. TIDAK boleh ada elemen login ("Lanjutkan dengan SSO", "Selamat Datang Kembali", dsb).
+        4. Jika poin 1, 2, dan 3 terpenuhi, maka halaman dianggap sudah login.
         """
         try:
+            if not page or page.is_closed():
+                return False
+
             url = page.url.lower().strip()
             if not url or url == "about:blank":
                 return False
@@ -161,33 +168,26 @@ class BrowserManager:
             netloc = parsed.netloc.lower()
             path = parsed.path.lower().rstrip("/")
 
-            # 1. Jika URL masih di domain SSO, Keycloak, OAuth, atau /login
+            # 1. Jika URL masih di domain SSO, Keycloak, OAuth, atau /login -> Belum login
             if any(k in url for k in ["sso.bps.go.id", "oauth2", "keycloak", "realms", "accounts.google"]):
                 return False
             if "/auth/login" in path or path.endswith("/login"):
                 return False
 
-            # 2. Jika URL persis adalah root login: https://fasih-sm.bps.go.id/app atau https://fasih-sm.bps.go.id
-            if path in ["/app", ""]:
-                # Pada path /app, jika ada tombol SSO atau teks selamat datang, belum login
-                try:
-                    if page.locator("text='Lanjutkan dengan SSO'").first.count() > 0:
-                        return False
-                    if page.locator("text='Selamat Datang Kembali'").first.count() > 0:
-                        return False
-                except Exception:
-                    pass
-                return False
-
-            # 3. Pengecekan selector login di DOM
-            unauth_selectors = [
-                "#kc-form-login",
-                "#kc-login",
+            # 2. Pengecekan selector login di DOM - jika ada yang terlihat, berarti belum login
+            login_selectors = [
+                "a:has-text('Lanjutkan dengan SSO')",
+                "button:has-text('Lanjutkan dengan SSO')",
+                "span:has-text('Lanjutkan dengan SSO')",
                 "text='Lanjutkan dengan SSO'",
+                "h1:has-text('Selamat Datang Kembali')",
                 "text='Selamat Datang Kembali'",
-                "a[href*='/auth/login']"
+                "dd:has-text('Masuk ke akun Anda')",
+                "a[href*='/auth/login']",
+                "#kc-form-login",
+                "#kc-login"
             ]
-            for sel in unauth_selectors:
+            for sel in login_selectors:
                 try:
                     loc = page.locator(sel).first
                     if loc.count() > 0 and loc.is_visible():
@@ -195,8 +195,7 @@ class BrowserManager:
                 except Exception:
                     pass
 
-            # 4. INDIKATOR UTAMA TERPERCAYA: Jalur pasca-login (berdasarkan PATH, bukan query parameter!)
-            # Begitu berhasil login, Fasih SELALU mengarahkan ke /surveys (atau penugasan/monitoring)
+            # 3. Indikator internal Fasih (survei, penugasan, monitoring, dashboard, dll)
             auth_subpaths = [
                 "/surveys",
                 "/survey",
@@ -210,10 +209,9 @@ class BrowserManager:
                 "/wilayah"
             ]
             if any(p in path for p in auth_subpaths):
-                # Pengguna sudah berhasil dialihkan ke halaman internal survei/penugasan!
                 return True
 
-            # 5. Fallback DOM jika berada di URL subpath lain
+            # 4. Fallback DOM di path lain
             auth_selectors = [
                 "a[href*='logout']",
                 "button:has-text('Logout')",
@@ -230,7 +228,8 @@ class BrowserManager:
                 except Exception:
                     pass
 
-            return False
+            # Jika berada di domain fasih-sm.bps.go.id dan tidak ada elemen login sama sekali
+            return True
         except Exception:
             return False
 
