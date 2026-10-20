@@ -1,0 +1,55 @@
+# ==============================================================================
+# GITIGNORE - FASIH 3603 HELPER (BPS KABUPATEN TANGERANG)
+# Best Practice Python, PyInstaller, Inno Setup & Local Environment
+# ==============================================================================
+
+# 1. Python Cache & Compiled Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyc
+
+# 2. PyInstaller & Build Artifacts (Jangan upload folder dist ke repo git)
+build/
+dist/
+dist_installer/
+
+# 3. Log & Temporary Files
+*.log
+*.bak
+*.tmp
+*.temp
+
+# 4. Data Excel & Temp Office Files (Mencegah data mentah/privat ter-upload)
+data/
+*.xlsx
+*.xls
+*.csv
+~$*.xlsx
+~$*.xls
+
+# 5. Virtual Environments & Local Dependencies
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 6. IDE & Editor Specific Folders
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 7. OS Generated Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 8. Chrome Profile & Browser Cache (Jika ada)
+chrome_profile/
+chrome_profile_cdp/
