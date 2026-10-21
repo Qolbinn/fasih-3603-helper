@@ -97,6 +97,10 @@ class EventBus:
         """Dipanggil dari UI saat pengguna mengonfirmasi manual bahwa sudah login di browser."""
         self._auth_confirm_event.set()
 
+    def reset_auth_confirmation(self):
+        """Mereset status konfirmasi login manual."""
+        self._auth_confirm_event.clear()
+
     def is_auth_confirmed(self):
         """Memeriksa apakah ada konfirmasi manual login dari pengguna."""
         return self._auth_confirm_event.is_set()

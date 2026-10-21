@@ -1,4 +1,6 @@
 import os
+import re
+import queue
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -21,6 +23,7 @@ class DataCleaningView(ctk.CTkFrame):
         self.tree_item_map = {} # row_idx -> treeview item id
         self.log_font_size = 11
         self.current_stats = {"total": 0, "done": 0, "error": 0, "pending": 0}
+        self.log_queue = queue.Queue()
 
         self._build_ui()
         self._setup_event_listener()
@@ -76,6 +79,20 @@ class DataCleaningView(ctk.CTkFrame):
         self.cb_minimize = ctk.CTkCheckBox(opt_row, text="Minimalkan Chrome Otomatis saat Berjalan")
         self.cb_minimize.pack(side="left", padx=(0, 10))
         self.cb_minimize.select()
+
+        # Multi-worker selector
+        ctk.CTkLabel(opt_row, text="⚡ Worker:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(15, 6))
+        self.worker_opt = ctk.CTkOptionMenu(
+            opt_row,
+            values=["1 Worker", "2 Worker (Disarankan)", "3 Worker", "4 Worker", "5 Worker"],
+            width=180,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#1e293b",
+            button_color="#334155",
+            button_hover_color="#475569"
+        )
+        self.worker_opt.set("2 Worker (Disarankan)")
+        self.worker_opt.pack(side="left", padx=(0, 10))
 
         # Baris 2b: Pengaturan Rentang Baris Eksekusi
         range_row = ctk.CTkFrame(header_frame, fg_color="transparent")
@@ -408,6 +425,44 @@ class DataCleaningView(ctk.CTkFrame):
             text_color="#64748b"
         ).pack(side="left", padx=10, pady=2)
 
+        # Mini Live Status Dashboard Worker
+        self.worker_dashboard_frame = ctk.CTkFrame(console_container, fg_color="#0b1324", height=32, corner_radius=0)
+        self.worker_dashboard_frame.pack(fill="x", padx=0, pady=(0, 2))
+
+        ctk.CTkLabel(
+            self.worker_dashboard_frame,
+            text="⚡ Status Worker:",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color="#94a3b8"
+        ).pack(side="left", padx=(10, 6), pady=4)
+
+        self.worker_badge_colors = {
+            1: "#38bdf8", # Sky blue
+            2: "#a78bfa", # Violet
+            3: "#fb923c", # Orange
+            4: "#f472b6", # Pink
+            5: "#34d399", # Emerald
+        }
+        self.worker_badges = {}
+        for i in range(1, 6):
+            b_frame = ctk.CTkFrame(
+                self.worker_dashboard_frame,
+                fg_color="#1e293b",
+                corner_radius=4,
+                border_width=1,
+                border_color="#334155"
+            )
+            lbl = ctk.CTkLabel(
+                b_frame,
+                text=f"W-{i}: ⏸️ Menunggu",
+                font=ctk.CTkFont(family="Consolas", size=10, weight="bold"),
+                text_color="#94a3b8"
+            )
+            lbl.pack(padx=8, pady=2)
+            self.worker_badges[i] = {"frame": b_frame, "label": lbl}
+            if i <= 2:
+                b_frame.pack(side="left", padx=4, pady=3)
+
         # Log Text Box
         self.log_text = tk.Text(
             console_container,
@@ -440,6 +495,13 @@ class DataCleaningView(ctk.CTkFrame):
         self.log_text.tag_config("ERROR", foreground="#f87171", font=("Consolas", self.log_font_size, "bold"))
         self.log_text.tag_config("DEBUG", foreground="#c084fc")
 
+        # Warna tag worker [W-1] s.d. [W-5]
+        self.log_text.tag_config("W1", foreground="#38bdf8", font=("Consolas", self.log_font_size, "bold"))
+        self.log_text.tag_config("W2", foreground="#a78bfa", font=("Consolas", self.log_font_size, "bold"))
+        self.log_text.tag_config("W3", foreground="#fb923c", font=("Consolas", self.log_font_size, "bold"))
+        self.log_text.tag_config("W4", foreground="#f472b6", font=("Consolas", self.log_font_size, "bold"))
+        self.log_text.tag_config("W5", foreground="#34d399", font=("Consolas", self.log_font_size, "bold"))
+
     def _zoom_in_log(self):
         if self.log_font_size < 22:
             self.log_font_size += 1
@@ -459,6 +521,8 @@ class DataCleaningView(ctk.CTkFrame):
         self.log_text.configure(font=("Consolas", self.log_font_size))
         self.log_text.tag_config("SUCCESS", font=("Consolas", self.log_font_size, "bold"))
         self.log_text.tag_config("ERROR", font=("Consolas", self.log_font_size, "bold"))
+        for i in range(1, 6):
+            self.log_text.tag_config(f"W{i}", font=("Consolas", self.log_font_size, "bold"))
 
     def _on_log_mousewheel(self, event):
         if event.delta > 0:
@@ -474,10 +538,8 @@ class DataCleaningView(ctk.CTkFrame):
         self.after(100, self._process_event_bus)
 
     def _on_log_emitted(self, level, message, time_str):
-        formatted = f"[{time_str}] [{level}] {message}\n"
-        self.log_text.insert("end", formatted, level)
-        if self.cb_autoscroll.get():
-            self.log_text.see("end")
+        # Masukkan ke queue agar diproses secara aman di UI main thread
+        self.log_queue.put((level, message, time_str))
 
     def _browse_file(self):
         filetypes = [("Excel Files", "*.xlsx"), ("All Files", "*.*")]
@@ -640,15 +702,31 @@ class DataCleaningView(ctk.CTkFrame):
                     messagebox.showwarning("Rentang Tidak Valid", "Nilai 's.d. Baris' harus berupa angka.")
                     return
 
-        # Ambil pengaturan mode
+        # Ambil pengaturan mode & worker
         debug_review = (self.mode_var.get() == "debug")
         auto_minimize = bool(self.cb_minimize.get())
+
+        raw_w = self.worker_opt.get()
+        try:
+            num_workers = int(raw_w.split()[0])
+        except Exception:
+            num_workers = 2
+
+        # Atur visibilitas badge worker di dashboard
+        for i in range(1, 6):
+            if i <= num_workers:
+                self.worker_badges[i]["frame"].pack(side="left", padx=4, pady=3)
+                self.worker_badges[i]["label"].configure(text=f"W-{i}: ⏸️ Menunggu", text_color="#94a3b8")
+                self.worker_badges[i]["frame"].configure(border_color="#334155")
+            else:
+                self.worker_badges[i]["frame"].pack_forget()
 
         config_opts = {
             "debug_review_submit": debug_review,
             "auto_minimize": auto_minimize,
             "row_start": row_start,
-            "row_end": row_end
+            "row_end": row_end,
+            "num_workers": num_workers
         }
 
         self.event_bus.reset_controls()
@@ -701,21 +779,71 @@ class DataCleaningView(ctk.CTkFrame):
         self.event_bus.confirm_auth_login()
 
     def _process_event_bus(self):
-        """Memproses event queue dari background worker thread ke UI."""
+        """Memproses event queue dan log terminal dari background worker thread ke UI."""
+        # 1. Flush antrean log ke log_text secara thread-safe pada UI main thread
+        logs_drained = 0
+        autoscroll = self.cb_autoscroll.get()
+        while not self.log_queue.empty() and logs_drained < 100:
+            try:
+                level, message, time_str = self.log_queue.get_nowait()
+                m = re.match(r"^(.*?)(\[W-([1-5])\])\s*(.*)$", message)
+                if m:
+                    pre, tag_text, w_num, post = m.groups()
+                    if pre:
+                        self.log_text.insert("end", f"[{time_str}] [{level}] {pre}", level)
+                    else:
+                        self.log_text.insert("end", f"[{time_str}] [{level}] ", level)
+                    self.log_text.insert("end", f"{tag_text} ", f"W{w_num}")
+                    self.log_text.insert("end", f"{post}\n", level)
+                else:
+                    formatted = f"[{time_str}] [{level}] {message}\n"
+                    self.log_text.insert("end", formatted, level)
+                logs_drained += 1
+            except queue.Empty:
+                break
+
+        if logs_drained > 0 and autoscroll:
+            self.log_text.see("end")
+
+        # 2. Proses event bus reguler
         events = self.event_bus.poll_events()
         for ev_type, payload in events:
             if ev_type == "row_started":
                 r_idx = payload["row_idx"]
                 nama = payload["nama_usaha"]
-                self.lbl_active_row.configure(text=f"🔄 Sedang memproses Baris {r_idx}: {nama}")
+                w_id = payload.get("worker_id")
+                w_info = f"[W-{w_id}] " if w_id else ""
+                self.lbl_active_row.configure(text=f"🔄 {w_info}Sedang memproses Baris {r_idx}: {nama}")
                 if r_idx in self.tree_item_map:
                     item_id = self.tree_item_map[r_idx]
                     vals = list(self.tree.item(item_id, "values"))
-                    vals[6] = "🔄 PROSES"
+                    vals[6] = f"🔄 PROSES (W{w_id})" if w_id else "🔄 PROSES"
                     old_tags = list(self.tree.item(item_id, "tags"))
                     stripe_tag = "odd" if "odd" in old_tags else "even"
                     self.tree.item(item_id, values=vals, tags=(stripe_tag, "tag_proses"))
                     self.tree.see(item_id)
+
+            elif ev_type == "worker_status_updated":
+                w_id = payload.get("worker_id")
+                st = payload.get("status")
+                r_idx = payload.get("row_idx")
+                nama = payload.get("nama_usaha", "")
+                if w_id and w_id in self.worker_badges:
+                    b_info = self.worker_badges[w_id]
+                    w_color = self.worker_badge_colors.get(w_id, "#38bdf8")
+                    if st == "BUSY":
+                        short_nama = (nama[:13] + "..") if len(nama) > 13 else nama
+                        b_info["label"].configure(text=f"W-{w_id}: 🔄 B{r_idx} {short_nama}", text_color=w_color)
+                        b_info["frame"].configure(border_color=w_color)
+                    elif st == "IDLE":
+                        b_info["label"].configure(text=f"W-{w_id}: ⏸️ Siap", text_color="#94a3b8")
+                        b_info["frame"].configure(border_color="#334155")
+                    elif st == "DONE":
+                        b_info["label"].configure(text=f"W-{w_id}: ✅ Selesai", text_color="#10b981")
+                        b_info["frame"].configure(border_color="#10b981")
+                    elif st == "ERROR":
+                        b_info["label"].configure(text=f"W-{w_id}: ❌ Error", text_color="#f87171")
+                        b_info["frame"].configure(border_color="#f87171")
 
             elif ev_type == "row_completed":
                 r_idx = payload["row_idx"]
@@ -764,14 +892,26 @@ class DataCleaningView(ctk.CTkFrame):
 
             elif ev_type == "auth_waiting":
                 msg = payload.get("message", "Silakan login SSO BPS & OTP di jendela Google Chrome.")
-                self.lbl_active_row.configure(text=f"🔑 [Login SSO Diperlukan] {msg}")
+                is_mid = payload.get("is_midrun", False)
+                r_idx = payload.get("row_idx")
+                if is_mid and r_idx:
+                    self.lbl_active_row.configure(text=f"🔑 [Sesi Habis di Baris {r_idx}] {msg}")
+                    self.btn_confirm_auth.configure(text="🟢 Saya Sudah Login Kembali")
+                else:
+                    self.lbl_active_row.configure(text=f"🔑 [Login SSO Diperlukan] {msg}")
+                    self.btn_confirm_auth.configure(text="🟢 Saya Sudah Login (Lanjutkan)")
                 if not self.btn_confirm_auth.winfo_ismapped():
                     self.btn_confirm_auth.pack(side="left", padx=(0, 8))
 
             elif ev_type == "auth_success":
                 if self.btn_confirm_auth.winfo_ismapped():
                     self.btn_confirm_auth.pack_forget()
-                self.lbl_active_row.configure(text="🟢 Login SSO Fasih aktif. Melanjutkan pembersihan data...")
+                is_mid = payload.get("is_midrun", False)
+                r_idx = payload.get("row_idx")
+                if is_mid and r_idx:
+                    self.lbl_active_row.configure(text=f"🟢 Sesi pulih! Memuat ulang Baris {r_idx}...")
+                else:
+                    self.lbl_active_row.configure(text="🟢 Login SSO Fasih aktif. Memulai pemrosesan data...")
 
             elif ev_type == "auth_required":
                 messagebox.showwarning("Perhatian SSO", payload["message"])
@@ -783,6 +923,10 @@ class DataCleaningView(ctk.CTkFrame):
                 self.btn_pause.configure(state="disabled", text="⏸️ Jeda", fg_color="#f59e0b")
                 self.btn_stop.configure(state="disabled")
                 self.btn_confirm_submit.configure(state="disabled", text="✅ Konfirmasi Submit & Lanjut (Enter)")
+                for i in range(1, 6):
+                    if i in self.worker_badges:
+                        self.worker_badges[i]["label"].configure(text=f"W-{i}: ✅ Selesai", text_color="#10b981")
+                        self.worker_badges[i]["frame"].configure(border_color="#10b981")
                 was_stopped = payload.get("was_stopped", False)
                 if was_stopped:
                     self.lbl_active_row.configure(text="⏹️ Otomasi telah dihentikan oleh pengguna.")
