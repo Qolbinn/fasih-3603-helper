@@ -1,0 +1,262 @@
+import os
+from pathlib import Path
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+from modules.remark_kbli.selectors import EXCEL_KBLI_COLUMNS_CONFIG
+
+class ExcelKBLIValidator:
+    MANDATORY_KEYS = [
+        "keg_utama",
+        "kbli_akhir",
+        "url",
+        "status_kbli",
+        "kbli_terbaru"
+    ]
+
+    @staticmethod
+    def is_file_locked(file_path):
+        """Memeriksa apakah file Excel sedang terbuka di aplikasi lain (Microsoft Excel) yang mengunci penulisan."""
+        if not os.path.exists(file_path):
+            return False
+        try:
+            with open(file_path, "r+b"):
+                return False
+        except (IOError, PermissionError):
+            return True
+
+    @classmethod
+    def validate_excel_file(cls, file_path):
+        """
+        Melakukan validasi menyeluruh terhadap file Excel input Remark KBLI.
+        Mengembalikan dict hasil pemeriksaan & data pratinjau.
+        """
+        p = Path(file_path)
+        if not p.exists():
+            return {
+                "valid": False,
+                "error": f"File tidak ditemukan: {file_path}",
+                "warning": None,
+                "file_locked": False,
+                "total_rows": 0,
+                "done_rows": 0,
+                "pending_rows": 0,
+                "rows_data": []
+            }
+
+        locked = cls.is_file_locked(file_path)
+        warning_msg = None
+        if locked:
+            warning_msg = "Perhatian: File sedang dibuka di Excel. Anda dapat melihat pratinjau, namun harap tutup file Excel sebelum memulai otomasi agar hasil dapat disimpan."
+
+        try:
+            with open(file_path, "rb") as f:
+                wb = openpyxl.load_workbook(f, data_only=True)
+                sheet = wb.active
+        except Exception as e:
+            return {
+                "valid": False,
+                "error": f"Gagal membaca format file Excel: {e}",
+                "warning": None,
+                "file_locked": locked,
+                "total_rows": 0,
+                "done_rows": 0,
+                "pending_rows": 0,
+                "rows_data": []
+            }
+
+        # 1. Baca header baris 1
+        header_map = {}
+        for col_idx in range(1, sheet.max_column + 1):
+            val = sheet.cell(row=1, column=col_idx).value
+            if val is not None:
+                header_map[str(val).strip().lower()] = col_idx
+
+        # 2. Mapping konfigurasi ke index kolom sebenarnya
+        col_map = {}
+        for key, aliases in EXCEL_KBLI_COLUMNS_CONFIG.items():
+            for alias in aliases:
+                clean_alias = str(alias).strip().lower()
+                if clean_alias in header_map:
+                    col_map[key] = header_map[clean_alias]
+                    break
+
+        # 3. Periksa kolom wajib
+        missing_mandatory = []
+        for mand in cls.MANDATORY_KEYS:
+            if mand not in col_map:
+                missing_mandatory.append(mand)
+
+        if missing_mandatory:
+            wb.close()
+            return {
+                "valid": False,
+                "error": f"Template tidak sesuai. Kolom wajib berikut tidak ditemukan: {', '.join(missing_mandatory)}",
+                "warning": warning_msg,
+                "file_locked": locked,
+                "total_rows": 0,
+                "done_rows": 0,
+                "pending_rows": 0,
+                "rows_data": []
+            }
+
+        # 4. Pindai baris data
+        url_col = col_map.get("url")
+        keg_col = col_map.get("keg_utama")
+        kbli_lama_col = col_map.get("kbli_akhir")
+        st_kbli_col = col_map.get("status_kbli")
+        kbli_baru_col = col_map.get("kbli_terbaru")
+        status_col = col_map.get("status")
+        ket_col = col_map.get("keterangan")
+
+        total_rows = 0
+        done_rows = 0
+        pending_rows = 0
+        rows_data = []
+
+        max_row = sheet.max_row
+        for r in range(2, max_row + 1):
+            url_val = sheet.cell(row=r, column=url_col).value if url_col else None
+            # Jika kolom URL kosong, baris dianggap kosong/tidak valid
+            if url_val is None or str(url_val).strip() == "":
+                continue
+
+            total_rows += 1
+            st_val = str(sheet.cell(row=r, column=status_col).value or "").strip() if status_col else ""
+            ket_val = str(sheet.cell(row=r, column=ket_col).value or "").strip() if ket_col else ""
+            keg_val = str(sheet.cell(row=r, column=keg_col).value or "").strip() if keg_col else ""
+            kbli_lama_val = str(sheet.cell(row=r, column=kbli_lama_col).value or "").strip() if kbli_lama_col else ""
+            st_kbli_val = str(sheet.cell(row=r, column=st_kbli_col).value or "").strip() if st_kbli_col else ""
+            kbli_baru_val = str(sheet.cell(row=r, column=kbli_baru_col).value or "").strip() if kbli_baru_col else ""
+
+            is_done = st_val.upper() in ["SUKSES", "DONE", "SELESAI"]
+            if is_done:
+                done_rows += 1
+            else:
+                pending_rows += 1
+
+            rows_data.append({
+                "row_idx": r,
+                "keg_utama": keg_val,
+                "kbli_akhir": kbli_lama_val,
+                "status_kbli": st_kbli_val,
+                "kbli_terbaru": kbli_baru_val,
+                "url": str(url_val).strip(),
+                "status": "✅ SUKSES" if is_done else ("🔄 PROSES" if st_val else "⏳ BELUM"),
+                "keterangan": ket_val
+            })
+
+        wb.close()
+
+        if total_rows == 0:
+            return {
+                "valid": False,
+                "error": "File Excel valid, tetapi tidak ada baris data penugasan (kolom URL kosong).",
+                "warning": warning_msg,
+                "file_locked": locked,
+                "total_rows": 0,
+                "done_rows": 0,
+                "pending_rows": 0,
+                "rows_data": []
+            }
+
+        return {
+            "valid": True,
+            "error": None,
+            "warning": warning_msg,
+            "file_locked": locked,
+            "total_rows": total_rows,
+            "done_rows": done_rows,
+            "pending_rows": pending_rows,
+            "rows_data": rows_data,
+            "col_map": col_map
+        }
+
+    @classmethod
+    def generate_template(cls, target_path):
+        """Membuat file template Excel standar untuk Remark KBLI."""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Data_KBLI"
+
+        headers = [
+            ("keg_utama", "Kegiatan Utama"),
+            ("kbli_akhir", "KBLI Akhir"),
+            ("url", "Link Penugasan Fasih (URL)"),
+            ("Status_KBLI", "Status KBLI"),
+            ("KBLI_Terbaru", "KBLI Terbaru"),
+            ("Status_Eksekusi", "Status Eksekusi (Opsional)"),
+            ("Keterangan", "Keterangan (Opsional)")
+        ]
+
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="6D28D9", end_color="6D28D9", fill_type="solid") # Ungu brand Fasih
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        thin_border = Border(
+            left=Side(style="thin", color="CCCCCC"),
+            right=Side(style="thin", color="CCCCCC"),
+            top=Side(style="thin", color="CCCCCC"),
+            bottom=Side(style="thin", color="CCCCCC")
+        )
+
+        ws.row_dimensions[1].height = 28
+
+        for col_idx, (col_id, col_label) in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=col_id)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = thin_border
+
+        # Contoh baris data sampel
+        sample_rows = [
+            (
+                "Perdagangan eceran berbagai macam barang yang utamanya makanan, minuman, atau tembakau di minimarket",
+                "47111",
+                "https://fasih-sm.bps.go.id/assignment/detail/sample-assignment-1",
+                "Sesuai",
+                "47111",
+                "",
+                ""
+            ),
+            (
+                "Reparasi dan perawatan mobil dan kendaraan bermotor",
+                "45201",
+                "https://fasih-sm.bps.go.id/assignment/detail/sample-assignment-2",
+                "Perlu Update",
+                "45202",
+                "",
+                ""
+            )
+        ]
+
+        data_font = Font(name="Calibri", size=10)
+        data_align = Alignment(vertical="center")
+
+        for r_idx, row_values in enumerate(sample_rows, 2):
+            ws.row_dimensions[r_idx].height = 22
+            for c_idx, val in enumerate(row_values, 1):
+                cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                cell.font = data_font
+                cell.alignment = data_align
+                cell.border = thin_border
+
+        # Atur lebar kolom otomatis
+        col_widths = {
+            1: 35, # keg_utama
+            2: 14, # kbli_akhir
+            3: 45, # url
+            4: 16, # Status_KBLI
+            5: 16, # KBLI_Terbaru
+            6: 18, # Status_Eksekusi
+            7: 25  # Keterangan
+        }
+        for col_idx, width in col_widths.items():
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = width
+
+        ws.freeze_panes = "A2"
+        wb.save(target_path)
+        wb.close()
