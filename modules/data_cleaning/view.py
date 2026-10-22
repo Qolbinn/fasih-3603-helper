@@ -14,9 +14,9 @@ from modules.data_cleaning.validator import ExcelValidator
 from modules.data_cleaning.engine import DataCleaningEngine
 
 class DataCleaningView(ctk.CTkFrame):
-    def __init__(self, master, event_bus: EventBus):
+    def __init__(self, master, event_bus: EventBus = None):
         super().__init__(master, corner_radius=10)
-        self.event_bus = event_bus
+        self.event_bus = event_bus or EventBus()
         self.worker_thread = None
         self.current_excel_path = None
         self.validated_data = None
@@ -737,14 +737,16 @@ class DataCleaningView(ctk.CTkFrame):
         self.btn_pause.configure(state="normal", text="⏸️ Jeda", fg_color="#f59e0b", hover_color="#d97706")
         self.btn_stop.configure(state="normal")
         self.btn_confirm_submit.configure(state="disabled")
-        if self.btn_confirm_auth.winfo_ismapped():
+        if self.btn_confirm_auth.winfo_manager() == "pack":
             self.btn_confirm_auth.pack_forget()
 
         self.worker_thread = threading.Thread(target=engine.run, daemon=True)
         self.worker_thread.start()
 
     def _on_enter_pressed(self, event=None):
-        if self.event_bus.is_waiting_confirm_submit():
+        if self.btn_confirm_auth.winfo_manager() == "pack":
+            self._confirm_auth_action()
+        elif self.event_bus.is_waiting_confirm_submit():
             self._confirm_submit_action()
 
     def _toggle_pause(self):
@@ -763,7 +765,7 @@ class DataCleaningView(ctk.CTkFrame):
             self.btn_pause.configure(state="disabled")
             self.btn_stop.configure(state="disabled")
             self.btn_confirm_submit.configure(state="disabled")
-            if self.btn_confirm_auth.winfo_ismapped():
+            if self.btn_confirm_auth.winfo_manager() == "pack":
                 self.btn_confirm_auth.pack_forget()
             self.lbl_active_row.configure(text="⏹️ Menghentikan otomasi secara aman...")
 
@@ -773,7 +775,7 @@ class DataCleaningView(ctk.CTkFrame):
         self.event_bus.confirm_submit()
 
     def _confirm_auth_action(self):
-        if self.btn_confirm_auth.winfo_ismapped():
+        if self.btn_confirm_auth.winfo_manager() == "pack":
             self.btn_confirm_auth.pack_forget()
         self.lbl_active_row.configure(text="🟢 Mengonfirmasi status login ke browser...")
         self.event_bus.confirm_auth_login()
@@ -900,11 +902,11 @@ class DataCleaningView(ctk.CTkFrame):
                 else:
                     self.lbl_active_row.configure(text=f"🔑 [Login SSO Diperlukan] {msg}")
                     self.btn_confirm_auth.configure(text="🟢 Saya Sudah Login (Lanjutkan)")
-                if not self.btn_confirm_auth.winfo_ismapped():
+                if self.btn_confirm_auth.winfo_manager() != "pack":
                     self.btn_confirm_auth.pack(side="left", padx=(0, 8))
 
             elif ev_type == "auth_success":
-                if self.btn_confirm_auth.winfo_ismapped():
+                if self.btn_confirm_auth.winfo_manager() == "pack":
                     self.btn_confirm_auth.pack_forget()
                 is_mid = payload.get("is_midrun", False)
                 r_idx = payload.get("row_idx")
@@ -917,7 +919,7 @@ class DataCleaningView(ctk.CTkFrame):
                 messagebox.showwarning("Perhatian SSO", payload["message"])
 
             elif ev_type == "all_completed":
-                if self.btn_confirm_auth.winfo_ismapped():
+                if self.btn_confirm_auth.winfo_manager() == "pack":
                     self.btn_confirm_auth.pack_forget()
                 self.btn_start.configure(state="normal")
                 self.btn_pause.configure(state="disabled", text="⏸️ Jeda", fg_color="#f59e0b")

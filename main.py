@@ -16,6 +16,7 @@ from core.event_bus import EventBus
 from core.browser_manager import BrowserManager
 from modules.data_cleaning.view import DataCleaningView
 from modules.approve_se2026.view import ApproveSE2026View
+from modules.remark_kbli.view import RemarkKBLIView
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -164,6 +165,7 @@ class Fasih3603App(ctk.CTk):
         self.nav_buttons = {}
         self._add_nav_item("beranda", "🏠 Beranda & Panduan", self._show_home_view)
         self._add_nav_item("cleaning", "🧹 Data Cleaning SE2026", self._show_cleaning_view)
+        self._add_nav_item("remark_kbli", "🏷️ Remark KBLI SE2026", self._show_remark_kbli_view)
         self._add_nav_item("approve", "✅ Approve SE 2026 (Soon)", self._show_approve_view)
         self._add_nav_item("pengaturan", "⚙️ Pengaturan & Info", self._show_settings_view)
 
@@ -176,8 +178,9 @@ class Fasih3603App(ctk.CTk):
         self.container = ctk.CTkFrame(self.body_frame, corner_radius=0, fg_color="transparent")
         self.container.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
-        # Modul views cache
-        self.view_cleaning = DataCleaningView(self.container, self.event_bus)
+        # Modul views cache dengan EventBus terisolasi per modul
+        self.view_cleaning = DataCleaningView(self.container, EventBus())
+        self.view_remark_kbli = RemarkKBLIView(self.container, EventBus())
         self.view_approve = ApproveSE2026View(self.container)
         self.view_home = self._create_home_view()
         self.view_settings = self._create_settings_view()
@@ -216,6 +219,9 @@ class Fasih3603App(ctk.CTk):
 
     def _show_cleaning_view(self):
         self._switch_view(self.view_cleaning, "cleaning")
+
+    def _show_remark_kbli_view(self):
+        self._switch_view(self.view_remark_kbli, "remark_kbli")
 
     def _show_approve_view(self):
         self._switch_view(self.view_approve, "approve")
@@ -256,8 +262,8 @@ class Fasih3603App(ctk.CTk):
         steps = [
             ("Langkah 1", "Klik tombol '🚀 Buka Browser Fasih' di kanan atas. Chrome akan terbuka."),
             ("Langkah 2", "Lakukan login SSO BPS + OTP di jendela Chrome tersebut sampai masuk dashboard Fasih."),
-            ("Langkah 3", "Buka menu 'Data Cleaning SE2026', pilih file Excel 'flag_clean.xlsx' yang sudah disiapkan."),
-            ("Langkah 4", "Klik 'Mulai Otomasi'. Bot akan memeriksa dan membersihkan data baris demi baris secara otomatis!")
+            ("Langkah 3", "Pilih modul '🧹 Data Cleaning SE2026' atau '🏷️ Remark KBLI SE2026', lalu pilih file Excel sasaran."),
+            ("Langkah 4", "Klik 'Mulai Otomasi'. Bot akan memeriksa dan memproses data baris demi baris secara otomatis!")
         ]
 
         for s_title, s_desc in steps:
@@ -274,12 +280,22 @@ class Fasih3603App(ctk.CTk):
 
         ctk.CTkButton(
             btn_box,
-            text="🧹 Buka Modul Data Cleaning Sekarang",
+            text="🧹 Buka Modul Data Cleaning",
             font=ctk.CTkFont(size=13, weight="bold"),
             height=42,
             fg_color="#7c3aed",
             hover_color="#6d28d9",
             command=self._show_cleaning_view
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            btn_box,
+            text="🏷️ Buka Modul Remark KBLI",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            height=42,
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            command=self._show_remark_kbli_view
         ).pack(side="left")
 
         return frame
@@ -344,6 +360,8 @@ class Fasih3603App(ctk.CTk):
     def _on_global_enter(self, event=None):
         if hasattr(self, "view_cleaning") and self.current_view == self.view_cleaning:
             self.view_cleaning._on_enter_pressed(event)
+        elif hasattr(self, "view_remark_kbli") and self.current_view == self.view_remark_kbli:
+            self.view_remark_kbli._on_enter_pressed(event)
 
     def _launch_chrome_action(self):
         self.lbl_browser_status.configure(text="🟡 Membuka...", text_color="#f59e0b")
@@ -375,9 +393,14 @@ class Fasih3603App(ctk.CTk):
         t.start()
 
     def _on_window_closing(self):
-        # Periksa apakah proses otomasi sedang berjalan
+        # Periksa apakah proses otomasi sedang berjalan di salah satu modul
         from core.event_bus import EngineState
-        if self.event_bus.get_state() in [EngineState.RUNNING, EngineState.PAUSED]:
+        running_views = []
+        for v in [getattr(self, "view_cleaning", None), getattr(self, "view_remark_kbli", None)]:
+            if v and hasattr(v, "event_bus") and v.event_bus.get_state() in [EngineState.RUNNING, EngineState.PAUSED]:
+                running_views.append(v)
+
+        if running_views:
             ans = messagebox.askyesno(
                 "Otomasi Sedang Berjalan",
                 "⚠️ Otomasi saat ini sedang berjalan!\n\n"
@@ -388,7 +411,8 @@ class Fasih3603App(ctk.CTk):
             if not ans:
                 return
 
-            self.event_bus.request_stop()
+            for v in running_views:
+                v.event_bus.request_stop()
             logger.warning("Aplikasi ditutup oleh pengguna. Menghentikan engine otomasi...")
             self.after(300, self.destroy)
         else:
