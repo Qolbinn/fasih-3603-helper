@@ -134,6 +134,52 @@ class RemarkKBLIView(ctk.CTkFrame):
         )
         self.lbl_range_hint.pack(side="left")
 
+        # Baris 2c: Pengaturan Metode Autentikasi / Login Fasih
+        auth_row = ctk.CTkFrame(header_frame, fg_color="transparent")
+        auth_row.pack(fill="x", padx=10, pady=(2, 4))
+
+        self.auth_mode_var = ctk.StringVar(value="manual")
+        ctk.CTkLabel(auth_row, text="Metode Login:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
+        self.rad_auth_manual = ctk.CTkRadioButton(
+            auth_row,
+            text="Login Manual (Sesi Chrome)",
+            variable=self.auth_mode_var,
+            value="manual",
+            command=self._toggle_auth_inputs
+        )
+        self.rad_auth_manual.pack(side="left", padx=(0, 15))
+
+        self.rad_auth_auto = ctk.CTkRadioButton(
+            auth_row,
+            text="Auto Login (Khusus Non-OTP)",
+            variable=self.auth_mode_var,
+            value="auto",
+            command=self._toggle_auth_inputs
+        )
+        self.rad_auth_auto.pack(side="left", padx=(0, 15))
+
+        # Sub-frame Kredensial SSO (User & Pass)
+        self.creds_frame = ctk.CTkFrame(auth_row, fg_color="#1e293b", corner_radius=6, border_width=1, border_color="#334155")
+        
+        ctk.CTkLabel(self.creds_frame, text="User SSO:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#94a3b8").pack(side="left", padx=(8, 4), pady=2)
+        self.entry_sso_user = ctk.CTkEntry(self.creds_frame, width=130, height=26, placeholder_text="username SSO")
+        self.entry_sso_user.pack(side="left", padx=(0, 8), pady=2)
+
+        ctk.CTkLabel(self.creds_frame, text="Pass SSO:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#94a3b8").pack(side="left", padx=(0, 4), pady=2)
+        self.entry_sso_pass = ctk.CTkEntry(self.creds_frame, width=130, height=26, placeholder_text="password SSO", show="*")
+        self.entry_sso_pass.pack(side="left", padx=(0, 6), pady=2)
+
+        self.btn_toggle_pass = ctk.CTkButton(
+            self.creds_frame,
+            text="👁",
+            width=28,
+            height=24,
+            fg_color="#334155",
+            hover_color="#475569",
+            command=self._toggle_show_password
+        )
+        self.btn_toggle_pass.pack(side="left", padx=(0, 6), pady=2)
+
         # Baris 3: Tombol Aksi
         btn_row = ctk.CTkFrame(header_frame, fg_color="transparent")
         btn_row.pack(fill="x", padx=10, pady=(6, 10))
@@ -680,6 +726,21 @@ class RemarkKBLIView(ctk.CTkFrame):
             self.entry_start_row.configure(state="disabled")
             self.entry_end_row.configure(state="disabled")
 
+    def _toggle_auth_inputs(self):
+        if self.auth_mode_var.get() == "auto":
+            self.creds_frame.pack(side="left", padx=(0, 10))
+            self.entry_sso_user.focus()
+        else:
+            self.creds_frame.pack_forget()
+
+    def _toggle_show_password(self):
+        if self.entry_sso_pass.cget("show") == "*":
+            self.entry_sso_pass.configure(show="")
+            self.btn_toggle_pass.configure(text="🔒")
+        else:
+            self.entry_sso_pass.configure(show="*")
+            self.btn_toggle_pass.configure(text="👁")
+
     def _start_automation(self):
         if not self.current_excel_path or not self.validated_data or not self.validated_data.get("valid"):
             messagebox.showwarning("Perhatian", "Silakan pilih file Excel dengan template yang valid terlebih dahulu.")
@@ -692,6 +753,24 @@ class RemarkKBLIView(ctk.CTkFrame):
                 "Harap tutup file Excel tersebut terlebih dahulu agar bot dapat menulis hasil eksekusi secara aman."
             )
             return
+
+        # Validasi Kredensial jika memilih Auto Login
+        auth_mode = self.auth_mode_var.get()
+        sso_username = self.entry_sso_user.get().strip() if hasattr(self, "entry_sso_user") else ""
+        sso_password = self.entry_sso_pass.get().strip() if hasattr(self, "entry_sso_pass") else ""
+
+        if auth_mode == "auto":
+            if not sso_username or not sso_password:
+                messagebox.showwarning(
+                    "Kredensial Belum Diisi",
+                    "Anda memilih mode 'Auto Login (Khusus Non-OTP)'.\n\n"
+                    "Silakan masukkan Username dan Password SSO BPS terlebih dahulu."
+                )
+                if not sso_username:
+                    self.entry_sso_user.focus()
+                else:
+                    self.entry_sso_pass.focus()
+                return
 
         row_start = 2
         row_end = None
@@ -736,7 +815,10 @@ class RemarkKBLIView(ctk.CTkFrame):
             "auto_minimize": auto_minimize,
             "row_start": row_start,
             "row_end": row_end,
-            "num_workers": num_workers
+            "num_workers": num_workers,
+            "auth_mode": auth_mode,
+            "sso_username": sso_username,
+            "sso_password": sso_password
         }
 
         self.event_bus.reset_controls()

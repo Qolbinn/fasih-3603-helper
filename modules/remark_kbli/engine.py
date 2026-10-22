@@ -1100,6 +1100,11 @@ class RemarkKBLIEngine:
         self.row_start = self.config_options.get("row_start", 2)
         self.row_end = self.config_options.get("row_end", None)
 
+        # Konfigurasi Mode Login SSO
+        self.auth_mode = self.config_options.get("auth_mode", "manual")  # "manual" | "auto"
+        self.sso_username = self.config_options.get("sso_username", "").strip()
+        self.sso_password = self.config_options.get("sso_password", "").strip()
+
         # Konfigurasi Multi-Worker (1 s.d. 5 worker)
         raw_workers = self.config_options.get("num_workers", 2)
         try:
@@ -1161,6 +1166,30 @@ class RemarkKBLIEngine:
                         return page
                 except Exception:
                     pass
+
+            # Opsi 1: Coba Auto-Login SSO BPS jika mode 'auto' dipilih pengguna
+            if self.auth_mode == "auto" and self.sso_username and self.sso_password:
+                logger.bot(f"{worker_tag}Sesi belum aktif / kedaluwarsa. Menjalankan Auto-Login SSO BPS (User: {self.sso_username})...")
+                login_page = page
+                if not login_page or login_page.is_closed():
+                    if context.pages:
+                        login_page = context.pages[0]
+                    else:
+                        login_page = context.new_page()
+
+                auto_ok, auto_err = BrowserManager.perform_auto_login(
+                    login_page, self.sso_username, self.sso_password
+                )
+                if auto_ok:
+                    logger.success(f"🟢 {worker_tag}Auto-Login SSO BPS berhasil! Sesi telah aktif.")
+                    if self.auto_minimize:
+                        WindowController.minimize_browser()
+                    time.sleep(1.5)
+                    return login_page
+                else:
+                    logger.warning(f"⚠️ {worker_tag}Auto-Login gagal ({auto_err}). Beralih ke mode Login Manual...")
+
+            # Opsi 2 / Fallback: Mode Login Manual (meminta pengguna login di Google Chrome)
 
             if is_midrun and row_idx:
                 prefix = f"Baris {row_idx} [{keg_utama}]"

@@ -283,3 +283,128 @@ class BrowserManager:
                 return "NOT_FASIH", "Halaman fasih-sm.bps.go.id belum dibuka"
         except Exception as e:
             return "ERROR", str(e)
+
+    @classmethod
+    def perform_auto_login(cls, page, username, password, timeout=30000):
+        """
+        Melakukan proses login otomatis SSO BPS (khusus akun non-OTP), diadaptasi dari approve_tf.py:
+        1. Memeriksa apakah halaman saat ini sudah berada di SSO Keycloak atau masih di Fasih.
+        2. Jika di Fasih, mengeklik tombol 'Lanjutkan dengan SSO' atau login Fasih.
+        3. Menunggu form login SSO (#username & #password).
+        4. Mengisi username dan password, lalu menekan Enter atau submit form.
+        5. Menunggu redirect kembali ke domain Fasih dan memvalidasi sesi aktif.
+        Return: (success: bool, error_msg: str or None)
+        """
+        if not username or not password:
+            return False, "Username atau Password SSO kosong"
+
+        try:
+            if not page or page.is_closed():
+                return False, "Page browser tidak valid atau telah ditutup"
+
+            logger.info("Memulai proses Auto-Login SSO BPS...")
+
+            # 1. Cek apakah sudah di halaman SSO
+            curr_url = page.url.lower()
+            is_on_sso = "sso.bps.go.id" in curr_url or page.locator("#kc-form-login, #username").count() > 0
+
+            if not is_on_sso:
+                # Cari tombol login di Fasih
+                login_btn_selectors = [
+                    "a:has-text('Lanjutkan dengan SSO')",
+                    "button:has-text('Lanjutkan dengan SSO')",
+                    "span:has-text('Lanjutkan dengan SSO')",
+                    "a.login-button[href*='oauth2']",
+                    "a[href*='/auth/login']",
+                    "button:has-text('Masuk')"
+                ]
+
+                clicked = False
+                for btn_sel in login_btn_selectors:
+                    try:
+                        loc = page.locator(btn_sel).first
+                        if loc.count() > 0 and loc.is_visible():
+                            logger.info(f"Mengeklik tombol login Fasih ('{btn_sel}')...")
+                            loc.click(timeout=8000)
+                            clicked = True
+                            break
+                    except Exception:
+                        pass
+
+                if not clicked:
+                    # Coba navigasi langsung ke landing page Fasih
+                    try:
+                        logger.info("Membuka https://fasih-sm.bps.go.id...")
+                        page.goto("https://fasih-sm.bps.go.id", timeout=20000, wait_until="domcontentloaded")
+                        time.sleep(1.5)
+                        for btn_sel in login_btn_selectors:
+                            try:
+                                loc = page.locator(btn_sel).first
+                                if loc.count() > 0 and loc.is_visible():
+                                    loc.click(timeout=8000)
+                                    break
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+            # 2. Tunggu form input SSO (#username)
+            logger.info("Menunggu form login SSO BPS (#username)...")
+            try:
+                user_input = page.locator("#username, input[name='username']").first
+                user_input.wait_for(state="visible", timeout=20000)
+            except Exception:
+                return False, "Form input SSO (#username) tidak muncul dalam batas waktu"
+
+            time.sleep(0.4)
+            # 3. Isi Username dan Password
+            logger.info(f"Mengisikan kredensial SSO untuk user '{username}'...")
+            user_input.fill(str(username).strip())
+            time.sleep(0.3)
+
+            pass_input = page.locator("#password, input[name='password']").first
+            pass_input.wait_for(state="visible", timeout=10000)
+            pass_input.fill(str(password).strip())
+            time.sleep(0.3)
+
+            # 4. Kirim Form (tekan Enter pada field password atau klik #kc-login)
+            logger.info("Mengirim formulir login SSO...")
+            submit_btn = page.locator("#kc-login, button[type='submit'], input[type='submit']").first
+            if submit_btn.count() > 0 and submit_btn.is_visible():
+                submit_btn.click(timeout=8000)
+            else:
+                pass_input.press("Enter")
+
+            # 5. Tunggu respon autentikasi
+            time.sleep(2.0)
+
+            # Cek jika muncul pesan error kredensial salah
+            error_elem = page.locator(".alert-error, #input-error, .kc-feedback-text, span.kc-feedback-text").first
+            if error_elem.count() > 0 and error_elem.is_visible():
+                err_text = error_elem.inner_text().strip()
+                return False, f"Login ditolak oleh SSO BPS: '{err_text}'"
+
+            # Cek jika muncul form OTP
+            otp_elem = page.locator("#otp, input[name='otp']").first
+            if otp_elem.count() > 0 and otp_elem.is_visible():
+                return False, "Akun memerlukan kode OTP. Fitur Auto-Login khusus akun non-OTP, silakan gunakan mode Login Manual."
+
+            # 6. Tunggu redirect kembali ke domain Fasih (maksimal 25 detik)
+            start_wait = time.time()
+            while time.time() - start_wait < 25:
+                if cls.is_page_logged_in(page):
+                    logger.success("Auto-Login SSO BPS berhasil diselesaikan!")
+                    time.sleep(1.0)
+                    return True, None
+                time.sleep(1.0)
+
+            # Cek terakhir
+            if cls.is_page_logged_in(page):
+                return True, None
+
+            return False, "Timeout menunggu redirect ke aplikasi Fasih setelah submit SSO"
+
+        except Exception as e:
+            logger.error(f"Terjadi kesalahan saat Auto-Login: {e}")
+            return False, str(e)
+
