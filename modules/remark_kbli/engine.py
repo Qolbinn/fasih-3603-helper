@@ -154,18 +154,16 @@ def add_remarks_to_element(page, container_selector, note_text, event_bus=None, 
 
     random_sleep(0.4, 0.7, event_bus=event_bus)
 
-def _open_blok2_and_get_single_business(page, event_bus=None, worker_prefix=""):
+def _ensure_blok2_and_usaha_menu_expanded(page, event_bus=None, worker_prefix=""):
     """
-    Membuka menu Blok II di sidebar, memastikan sub-sidebar 'Keterangan Usaha/Perusahaan'
-    terbuka, dan menghitung jumlah usaha.
-    Return: (success: bool, count: int, nama_usaha: str or None, error_msg: str or None)
+    Memastikan menu Blok II dan sub-menu 'Keterangan Usaha/Perusahaan' di sidebar
+    dalam kondisi terbuka (expanded).
     """
-    logger.bot(f"{worker_prefix}Membuka menu Blok II di sidebar...")
     blok2_elem = page.locator(KBLI_SELECTORS["sidebar_blok_ii"]).first
     try:
-        blok2_elem.wait_for(state="attached", timeout=25000)
+        blok2_elem.wait_for(state="attached", timeout=20000)
     except Exception:
-        return False, 0, None, "Menu Blok II tidak ditemukan di sidebar"
+        return False, "Menu Blok II tidak ditemukan di sidebar"
 
     try:
         blok2_elem.scroll_into_view_if_needed(timeout=5000)
@@ -180,6 +178,7 @@ def _open_blok2_and_get_single_business(page, event_bus=None, worker_prefix=""):
         "/ancestor::div[contains(@class, 'fasih-form-sidebar')][1]/following-sibling::div[starts-with(@id, 'collapsible-')]"
     ).first
     if blok2_collapsible.count() == 0 or blok2_collapsible.get_attribute("data-expanded") is None:
+        logger.bot(f"{worker_prefix}Membuka menu Blok II di sidebar...")
         safe_click(page, blok2_elem, timeout=15000, event_bus=event_bus)
         random_sleep(0.7, 1.2, event_bus=event_bus)
 
@@ -197,40 +196,106 @@ def _open_blok2_and_get_single_business(page, event_bus=None, worker_prefix=""):
             safe_click(page, ket_usaha, timeout=10000, event_bus=event_bus)
             random_sleep(0.6, 1.0, event_bus=event_bus)
 
-    def _get_valid_usaha_items():
-        raw_items = page.locator(KBLI_SELECTORS["sidebar_sub_usaha_items"]).all()
-        valid = []
-        for item in raw_items:
-            try:
-                t = (item.get_attribute("title") or item.inner_text() or "").strip()
-                t_upper = t.upper()
-                if t and not any(skip in t_upper for skip in ["BLOK II", "KETERANGAN USAHA/PERUSAHAAN", "CATATAN"]):
-                    valid.append((item, t))
-            except Exception:
-                pass
-        return valid
+    return True, None
 
-    # Hitung jumlah item usaha di sub-sidebar
-    valid_items = _get_valid_usaha_items()
+def _get_valid_usaha_items(page):
+    """Mengambil daftar elemen dan nama usaha yang valid di sub-menu Keterangan Usaha."""
+    raw_items = page.locator(KBLI_SELECTORS["sidebar_sub_usaha_items"]).all()
+    valid = []
+    for item in raw_items:
+        try:
+            t = (item.get_attribute("title") or item.inner_text() or "").strip()
+            t_upper = t.upper()
+            if t and not any(skip in t_upper for skip in ["BLOK II", "KETERANGAN USAHA/PERUSAHAAN", "CATATAN"]):
+                valid.append((item, t))
+        except Exception:
+            pass
+    return valid
+
+def _find_and_open_matching_business(page, excel_keg_utama, event_bus=None, worker_prefix="", check_stop_fn=None):
+    """
+    Menemukan dan membuka rincian usaha yang sesuai dengan kegiatan utama (keg_utama) di Excel:
+    1. Membuka sidebar Blok II dan sub-menu Keterangan Usaha/Perusahaan.
+    2. Mendeteksi seluruh usaha yang terdaftar di Blok II.
+    3. Jika jumlah usaha == 0 -> return False, None, 'Tidak ada rincian usaha di Blok II'.
+    4. Jika jumlah usaha >= 1:
+       - Loop setiap usaha satu per satu:
+         - Pastikan sidebar terbuka, lalu klik item usaha ke-i.
+         - Periksa isian field_kegiatan_utama pada form rincian usaha vs excel_keg_utama.
+         - Jika cocok: return True, matched_nama_usaha, None.
+         - Jika tidak cocok: lanjut periksa usaha berikutnya.
+    5. Jika seluruh usaha telah diperiksa dan tidak ada yang cocok:
+       - return False, None, pesan keterangan tidak cocok.
+    """
+    logger.bot(f"{worker_prefix}Membuka menu Blok II di sidebar...")
+    ok_menu, err_menu = _ensure_blok2_and_usaha_menu_expanded(page, event_bus=event_bus, worker_prefix=worker_prefix)
+    if not ok_menu:
+        return False, None, err_menu
+
+    # Ambil daftar usaha valid
+    valid_items = _get_valid_usaha_items(page)
     count = len(valid_items)
 
     if count == 0:
-        # Beri toleransi animasi render
         random_sleep(0.8, 1.2, event_bus=event_bus)
-        valid_items = _get_valid_usaha_items()
+        valid_items = _get_valid_usaha_items(page)
         count = len(valid_items)
 
     if count == 0:
-        return False, 0, None, "Tidak ada rincian usaha di Blok II"
-    elif count > 1:
-        return False, count, None, f"Ditemukan {count} usaha di Blok II (multi-usaha dilewati)"
+        return False, None, "Tidak ada rincian usaha di Blok II"
 
-    # Tepat 1 usaha ditemukan -> klik untuk menuju halaman form rincian usaha
-    single_item, nama_usaha = valid_items[0]
-    logger.bot(f"{worker_prefix}Ditemukan 1 usaha: '{nama_usaha}'. Membuka halaman rincian usaha...")
-    safe_click(page, single_item, timeout=15000, event_bus=event_bus)
-    random_sleep(1.2, 2.0, event_bus=event_bus)
-    return True, 1, nama_usaha, None
+    usaha_names = [name for _, name in valid_items]
+
+    if count == 1:
+        logger.bot(f"{worker_prefix}Ditemukan 1 usaha: '{usaha_names[0]}'. Memeriksa kesesuaian kegiatan utama...")
+    else:
+        logger.bot(f"{worker_prefix}Ditemukan {count} usaha di Blok II. Mencari usaha yang sesuai dengan kegiatan utama '{excel_keg_utama[:35]}'...")
+
+    last_web_val = ""
+
+    for idx in range(count):
+        if check_stop_fn and not check_stop_fn():
+            return False, None, "Dihentikan oleh pengguna saat pencarian usaha"
+        if event_bus and event_bus.is_stop_requested():
+            return False, None, "Dihentikan oleh pengguna"
+
+        curr_name = usaha_names[idx] if idx < len(usaha_names) else f"Usaha #{idx+1}"
+
+        if count > 1:
+            logger.bot(f"{worker_prefix}[Usaha {idx+1}/{count}: '{curr_name}'] Membuka halaman rincian usaha...")
+
+        # Pastikan menu Blok II & Keterangan Usaha tetap expanded
+        _ensure_blok2_and_usaha_menu_expanded(page, event_bus=event_bus, worker_prefix=worker_prefix)
+
+        # Re-query elemen untuk menghindari stale handle
+        current_items = _get_valid_usaha_items(page)
+        if idx >= len(current_items):
+            logger.warning(f"⚠️ {worker_prefix}Item usaha ke-{idx+1} tidak ditemukan di sub-sidebar, mencoba lanjutkan...")
+            continue
+
+        item_loc, _ = current_items[idx]
+        safe_click(page, item_loc, timeout=15000, event_bus=event_bus)
+        random_sleep(1.2, 1.8, event_bus=event_bus)
+
+        # Validasi keg_utama pada formulir usaha yang sedang aktif
+        keg_cocok, keg_web = _validate_kegiatan_utama(page, excel_keg_utama, timeout=15000)
+        last_web_val = keg_web
+
+        if keg_cocok:
+            if count > 1:
+                logger.success(f"{worker_prefix}[Usaha {idx+1}/{count}: '{curr_name}'] Kegiatan utama COCOK! ('{keg_web[:35]}')")
+            else:
+                logger.success(f"{worker_prefix}Kegiatan utama cocok: '{keg_web[:35]}'")
+            return True, curr_name, None
+        else:
+            if count > 1:
+                logger.info(f"{worker_prefix}[Usaha {idx+1}/{count}: '{curr_name}'] Tidak cocok (Web: '{keg_web[:25]}' vs Excel: '{excel_keg_utama[:25]}').")
+
+    # Jika setelah memeriksa semua usaha tidak ada yang cocok
+    if count == 1:
+        return False, usaha_names[0], f"Kegiatan utama tidak sesuai (Excel: '{excel_keg_utama[:25]}' vs Web: '{last_web_val[:25]}')"
+    else:
+        return False, None, f"Dari {count} usaha di Blok II, tidak ada yang cocok dengan kegiatan utama '{excel_keg_utama[:25]}'"
 
 def _validate_kegiatan_utama(page, excel_keg, timeout=20000):
     """
@@ -1305,40 +1370,20 @@ class RemarkKBLIEngine:
                     if not self.check_pause_and_stop(row_idx, audit_data, worker_id):
                         return
 
-                    # STEP 1 & 2: Buka Sidebar Blok II & Validasi Jumlah Usaha
-                    ok_usaha, usaha_count, nama_usaha_web, err_usaha = _open_blok2_and_get_single_business(
-                        page, event_bus=self.event_bus, worker_prefix=w_tag
+                    # STEP 1, 2, & 3: Buka Blok II & Temukan Usaha yang Sesuai keg_utama
+                    def _chk_stop():
+                        return self.check_pause_and_stop(row_idx, audit_data, worker_id)
+
+                    found_match, matched_nama_usaha, err_match = _find_and_open_matching_business(
+                        page, excel_keg_utama=keg_utama, event_bus=self.event_bus,
+                        worker_prefix=w_tag, check_stop_fn=_chk_stop
                     )
-                    if not ok_usaha:
-                        logger.warning(f"⚠️ {w_tag}Baris {row_idx}: {err_usaha} -> Dilewati.")
-                        with self.excel_lock:
-                            sheet.cell(row=row_idx, column=status_col).value = "DILEWATI"
-                            sheet.cell(row=row_idx, column=ket_col).value = err_usaha
-                            try:
-                                wb.save(self.excel_path)
-                            except Exception:
-                                pass
-                        with self.stats_lock:
-                            self.skipped_count += 1
-                        audit_data["status"] = "DILEWATI"
-                        audit_data["keterangan"] = err_usaha
-                        audit_logger.record_row(audit_data)
-                        self.event_bus.emit("row_completed", {
-                            "row_idx": row_idx,
-                            "status": "⏭️ DILEWATI",
-                            "keterangan": err_usaha,
-                            "worker_id": worker_id
-                        })
+
+                    if self.event_bus.is_stop_requested():
                         return
 
-                    if not self.check_pause_and_stop(row_idx, audit_data, worker_id):
-                        return
-
-                    # STEP 3: Validasi keg_utama (Case-Insensitive)
-                    logger.bot(f"{w_tag}Memeriksa kesesuaian kegiatan utama...")
-                    keg_cocok, keg_web = _validate_kegiatan_utama(page, keg_utama, timeout=20000)
-                    if not keg_cocok:
-                        skip_msg = f"Kegiatan utama tidak sesuai (Excel: '{keg_utama[:25]}' vs Web: '{keg_web[:25]}')"
+                    if not found_match:
+                        skip_msg = err_match or f"Tidak ditemukan usaha di Blok II yang cocok dengan kegiatan utama '{keg_utama[:25]}'"
                         logger.warning(f"⚠️ {w_tag}Baris {row_idx}: {skip_msg} -> Dilewati.")
                         with self.excel_lock:
                             sheet.cell(row=row_idx, column=status_col).value = "DILEWATI"
@@ -1362,6 +1407,9 @@ class RemarkKBLIEngine:
 
                     if not self.check_pause_and_stop(row_idx, audit_data, worker_id):
                         return
+
+                    if matched_nama_usaha:
+                        audit_data["nama_usaha"] = matched_nama_usaha
 
                     # STEP 4: Verifikasi & Aksi KBLI (Kondisi 1 vs Kondisi 2)
                     logger.bot(f"{w_tag}Memeriksa rincian KBLI GenAI dan Master KBLI...")
@@ -1425,7 +1473,8 @@ class RemarkKBLIEngine:
                         return
 
                     # Checkpoint Sukses Akhir
-                    final_ket = f"{kbli_ket} | {sub_ket}"
+                    prefix_usaha = f"[{matched_nama_usaha}] " if matched_nama_usaha else ""
+                    final_ket = f"{prefix_usaha}{kbli_ket} | {sub_ket}"
                     with self.excel_lock:
                         sheet.cell(row=row_idx, column=status_col).value = "SUKSES"
                         sheet.cell(row=row_idx, column=ket_col).value = final_ket
