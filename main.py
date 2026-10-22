@@ -17,6 +17,7 @@ from core.browser_manager import BrowserManager
 from modules.data_cleaning.view import DataCleaningView
 from modules.approve_se2026.view import ApproveSE2026View
 from modules.remark_kbli.view import RemarkKBLIView
+from modules.cleaning_nik.view import CleaningNIKView
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -166,6 +167,7 @@ class Fasih3603App(ctk.CTk):
         self._add_nav_item("beranda", "🏠 Beranda & Panduan", self._show_home_view)
         self._add_nav_item("cleaning", "🧹 Data Cleaning SE2026", self._show_cleaning_view)
         self._add_nav_item("remark_kbli", "🏷️ Remark KBLI SE2026", self._show_remark_kbli_view)
+        self._add_nav_item("cleaning_nik", "🆔 Cleaning NIK SE2026", self._show_cleaning_nik_view)
         self._add_nav_item("approve", "✅ Approve SE 2026 (Soon)", self._show_approve_view)
         self._add_nav_item("pengaturan", "⚙️ Pengaturan & Info", self._show_settings_view)
 
@@ -181,6 +183,7 @@ class Fasih3603App(ctk.CTk):
         # Modul views cache dengan EventBus terisolasi per modul
         self.view_cleaning = DataCleaningView(self.container, EventBus())
         self.view_remark_kbli = RemarkKBLIView(self.container, EventBus())
+        self.view_cleaning_nik = CleaningNIKView(self.container, EventBus())
         self.view_approve = ApproveSE2026View(self.container)
         self.view_home = self._create_home_view()
         self.view_settings = self._create_settings_view()
@@ -222,6 +225,9 @@ class Fasih3603App(ctk.CTk):
 
     def _show_remark_kbli_view(self):
         self._switch_view(self.view_remark_kbli, "remark_kbli")
+
+    def _show_cleaning_nik_view(self):
+        self._switch_view(self.view_cleaning_nik, "cleaning_nik")
 
     def _show_approve_view(self):
         self._switch_view(self.view_approve, "approve")
@@ -296,6 +302,16 @@ class Fasih3603App(ctk.CTk):
             fg_color="#0284c7",
             hover_color="#0369a1",
             command=self._show_remark_kbli_view
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            btn_box,
+            text="🆔 Buka Modul Cleaning NIK",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            height=42,
+            fg_color="#0d9488",
+            hover_color="#0f766e",
+            command=self._show_cleaning_nik_view
         ).pack(side="left")
 
         return frame
@@ -362,6 +378,8 @@ class Fasih3603App(ctk.CTk):
             self.view_cleaning._on_enter_pressed(event)
         elif hasattr(self, "view_remark_kbli") and self.current_view == self.view_remark_kbli:
             self.view_remark_kbli._on_enter_pressed(event)
+        elif hasattr(self, "view_cleaning_nik") and self.current_view == self.view_cleaning_nik:
+            self.view_cleaning_nik._on_enter_pressed(event)
 
     def _launch_chrome_action(self):
         self.lbl_browser_status.configure(text="🟡 Membuka...", text_color="#f59e0b")
@@ -396,7 +414,7 @@ class Fasih3603App(ctk.CTk):
         # Periksa apakah proses otomasi sedang berjalan di salah satu modul
         from core.event_bus import EngineState
         running_views = []
-        for v in [getattr(self, "view_cleaning", None), getattr(self, "view_remark_kbli", None)]:
+        for v in [getattr(self, "view_cleaning", None), getattr(self, "view_remark_kbli", None), getattr(self, "view_cleaning_nik", None)]:
             if v and hasattr(v, "event_bus") and v.event_bus.get_state() in [EngineState.RUNNING, EngineState.PAUSED]:
                 running_views.append(v)
 

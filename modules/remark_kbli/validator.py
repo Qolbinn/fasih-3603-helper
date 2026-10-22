@@ -3,6 +3,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from modules.remark_kbli.selectors import EXCEL_KBLI_COLUMNS_CONFIG
 
@@ -210,14 +211,14 @@ class ExcelKBLIValidator:
             cell.alignment = header_align
             cell.border = thin_border
 
-        # Contoh baris data sampel
+        # Contoh baris data sampel (Status_KBLI: "Tetap" atau "Ganti", KBLI_Terbaru terisi jika "Ganti")
         sample_rows = [
             (
                 "Perdagangan eceran berbagai macam barang yang utamanya makanan, minuman, atau tembakau di minimarket",
                 "47111",
                 "https://fasih-sm.bps.go.id/assignment/detail/sample-assignment-1",
-                "Sesuai",
-                "47111",
+                "Tetap",
+                "",
                 "",
                 ""
             ),
@@ -225,7 +226,7 @@ class ExcelKBLIValidator:
                 "Reparasi dan perawatan mobil dan kendaraan bermotor",
                 "45201",
                 "https://fasih-sm.bps.go.id/assignment/detail/sample-assignment-2",
-                "Perlu Update",
+                "Ganti",
                 "45202",
                 "",
                 ""
@@ -256,6 +257,15 @@ class ExcelKBLIValidator:
         for col_idx, width in col_widths.items():
             col_letter = get_column_letter(col_idx)
             ws.column_dimensions[col_letter].width = width
+
+        # Data validation dropdown untuk kolom Status_KBLI (D2:D1000)
+        dv = DataValidation(type="list", formula1='"Tetap,Ganti"', allow_blank=True)
+        dv.error = 'Status_KBLI hanya boleh diisi "Tetap" atau "Ganti"'
+        dv.errorTitle = 'Nilai Tidak Valid'
+        dv.prompt = 'Pilih "Tetap" atau "Ganti"'
+        dv.promptTitle = 'Status KBLI'
+        ws.add_data_validation(dv)
+        dv.add("D2:D1000")
 
         ws.freeze_panes = "A2"
         wb.save(target_path)
