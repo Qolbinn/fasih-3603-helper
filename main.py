@@ -18,6 +18,7 @@ from modules.data_cleaning.view import DataCleaningView
 from modules.approve_se2026.view import ApproveSE2026View
 from modules.remark_kbli.view import RemarkKBLIView
 from modules.cleaning_nik.view import CleaningNIKView
+from modules.kbli_sembako.view import KBLISembakoView
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -167,6 +168,7 @@ class Fasih3603App(ctk.CTk):
         self._add_nav_item("beranda", "🏠 Beranda & Panduan", self._show_home_view)
         self._add_nav_item("cleaning", "🧹 Data Cleaning SE2026", self._show_cleaning_view)
         self._add_nav_item("remark_kbli", "🏷️ Remark KBLI SE2026", self._show_remark_kbli_view)
+        self._add_nav_item("kbli_sembako", "🛒 KBLI Sembako SE2026", self._show_kbli_sembako_view)
         self._add_nav_item("cleaning_nik", "🆔 Cleaning NIK SE2026", self._show_cleaning_nik_view)
         self._add_nav_item("approve", "✅ Approve SE 2026 (Soon)", self._show_approve_view)
         self._add_nav_item("pengaturan", "⚙️ Pengaturan & Info", self._show_settings_view)
@@ -183,6 +185,7 @@ class Fasih3603App(ctk.CTk):
         # Modul views cache dengan EventBus terisolasi per modul
         self.view_cleaning = DataCleaningView(self.container, EventBus())
         self.view_remark_kbli = RemarkKBLIView(self.container, EventBus())
+        self.view_kbli_sembako = KBLISembakoView(self.container, EventBus())
         self.view_cleaning_nik = CleaningNIKView(self.container, EventBus())
         self.view_approve = ApproveSE2026View(self.container)
         self.view_home = self._create_home_view()
@@ -225,6 +228,9 @@ class Fasih3603App(ctk.CTk):
 
     def _show_remark_kbli_view(self):
         self._switch_view(self.view_remark_kbli, "remark_kbli")
+
+    def _show_kbli_sembako_view(self):
+        self._switch_view(self.view_kbli_sembako, "kbli_sembako")
 
     def _show_cleaning_nik_view(self):
         self._switch_view(self.view_cleaning_nik, "cleaning_nik")
@@ -302,6 +308,16 @@ class Fasih3603App(ctk.CTk):
             fg_color="#0284c7",
             hover_color="#0369a1",
             command=self._show_remark_kbli_view
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            btn_box,
+            text="🛒 Buka Modul KBLI Sembako",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            height=42,
+            fg_color="#d97706",
+            hover_color="#b45309",
+            command=self._show_kbli_sembako_view
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
