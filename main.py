@@ -14,11 +14,20 @@ from config import (
 from core.logger import logger
 from core.event_bus import EventBus
 from core.browser_manager import BrowserManager
-from modules.data_cleaning.view import DataCleaningView
+from modules.cleaning_usaha.view import CleaningUsahaView, DataCleaningView
 from modules.approve_se2026.view import ApproveSE2026View
 from modules.remark_kbli.view import RemarkKBLIView
-from modules.cleaning_nik.view import CleaningNIKView
 from modules.kbli_sembako.view import KBLISembakoView
+from modules.cleaning_nik_r30.view import CleaningNIKR30View, CleaningNIKView
+from modules.cleaning_nik_r27.view import CleaningNIKR27View
+
+if sys.platform == "win32":
+    try:
+        import ctypes
+        myappid = f"bps3603.fasihhelper.desktop.{APP_VERSION}"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -31,15 +40,40 @@ class Fasih3603App(ctk.CTk):
         self.geometry("1120x740")
         self.minsize(980, 640)
 
-        # Set Window and Taskbar Icon
+        # Set Window and Taskbar Icon (Native Multi-Resolution & Win32 Integration)
+        self._apply_window_icon()
+        self.after(200, self._apply_window_icon)
+        self.after(600, self._apply_window_icon)
+
+    def _apply_window_icon(self):
+        """Menerapkan ikon aplikasi multi-resolusi ke taskbar dan title bar Windows."""
         try:
             if APP_ICON_ICO.exists():
                 self.iconbitmap(str(APP_ICON_ICO))
-            if APP_LOGO_PNG.exists():
-                self._app_icon_photo = tk.PhotoImage(file=str(APP_LOGO_PNG))
-                self.iconphoto(True, self._app_icon_photo)
+                self.wm_iconbitmap(str(APP_ICON_ICO))
         except Exception:
             pass
+
+        if sys.platform == "win32" and APP_ICON_ICO.exists():
+            try:
+                import win32gui
+                import win32con
+                hwnd = win32gui.GetParent(self.winfo_id()) or self.winfo_id()
+                # Muat ikon native Win32 untuk Taskbar (Big) & Title Bar (Small)
+                hicon_big = win32gui.LoadImage(
+                    0, str(APP_ICON_ICO), win32con.IMAGE_ICON, 0, 0,
+                    win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE
+                )
+                hicon_small = win32gui.LoadImage(
+                    0, str(APP_ICON_ICO), win32con.IMAGE_ICON, 16, 16,
+                    win32con.LR_LOADFROMFILE
+                )
+                if hicon_big:
+                    win32gui.SendMessage(hwnd, win32con.WM_SETICON, win32con.ICON_BIG, hicon_big)
+                if hicon_small:
+                    win32gui.SendMessage(hwnd, win32con.WM_SETICON, win32con.ICON_SMALL, hicon_small)
+            except Exception:
+                pass
 
         self.event_bus = EventBus()
         self.current_view = None
@@ -166,10 +200,11 @@ class Fasih3603App(ctk.CTk):
 
         self.nav_buttons = {}
         self._add_nav_item("beranda", "🏠 Beranda & Panduan", self._show_home_view)
-        self._add_nav_item("cleaning", "🧹 Data Cleaning SE2026", self._show_cleaning_view)
+        self._add_nav_item("cleaning_usaha", "🧹 Cleaning Usaha SE2026", self._show_cleaning_usaha_view)
         self._add_nav_item("remark_kbli", "🏷️ Remark KBLI SE2026", self._show_remark_kbli_view)
         self._add_nav_item("kbli_sembako", "🛒 KBLI Sembako SE2026", self._show_kbli_sembako_view)
-        self._add_nav_item("cleaning_nik", "🆔 Cleaning NIK SE2026", self._show_cleaning_nik_view)
+        self._add_nav_item("cleaning_nik_r30", "🆔 Cleaning NIK R30 SE2026", self._show_cleaning_nik_r30_view)
+        self._add_nav_item("cleaning_nik_r27", "🆔 Cleaning NIK R27 SE2026", self._show_cleaning_nik_r27_view)
         self._add_nav_item("approve", "✅ Approve SE 2026 (Soon)", self._show_approve_view)
         self._add_nav_item("pengaturan", "⚙️ Pengaturan & Info", self._show_settings_view)
 
@@ -183,16 +218,21 @@ class Fasih3603App(ctk.CTk):
         self.container.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
         # Modul views cache dengan EventBus terisolasi per modul
-        self.view_cleaning = DataCleaningView(self.container, EventBus())
+        self.view_cleaning_usaha = CleaningUsahaView(self.container, EventBus())
         self.view_remark_kbli = RemarkKBLIView(self.container, EventBus())
         self.view_kbli_sembako = KBLISembakoView(self.container, EventBus())
-        self.view_cleaning_nik = CleaningNIKView(self.container, EventBus())
+        self.view_cleaning_nik_r30 = CleaningNIKR30View(self.container, EventBus())
+        self.view_cleaning_nik_r27 = CleaningNIKR27View(self.container, EventBus())
         self.view_approve = ApproveSE2026View(self.container)
         self.view_home = self._create_home_view()
         self.view_settings = self._create_settings_view()
 
-        # Default buka Data Cleaning
-        self._show_cleaning_view()
+        # Kompatibilitas atribut lama
+        self.view_cleaning = self.view_cleaning_usaha
+        self.view_cleaning_nik = self.view_cleaning_nik_r30
+
+        # Default buka Cleaning Usaha
+        self._show_cleaning_usaha_view()
 
     def _add_nav_item(self, key, label, cmd):
         btn = ctk.CTkButton(
@@ -223,8 +263,11 @@ class Fasih3603App(ctk.CTk):
         self.current_view.pack(fill="both", expand=True)
         self._set_active_nav(nav_key)
 
+    def _show_cleaning_usaha_view(self):
+        self._switch_view(self.view_cleaning_usaha, "cleaning_usaha")
+
     def _show_cleaning_view(self):
-        self._switch_view(self.view_cleaning, "cleaning")
+        self._show_cleaning_usaha_view()
 
     def _show_remark_kbli_view(self):
         self._switch_view(self.view_remark_kbli, "remark_kbli")
@@ -232,8 +275,14 @@ class Fasih3603App(ctk.CTk):
     def _show_kbli_sembako_view(self):
         self._switch_view(self.view_kbli_sembako, "kbli_sembako")
 
+    def _show_cleaning_nik_r30_view(self):
+        self._switch_view(self.view_cleaning_nik_r30, "cleaning_nik_r30")
+
     def _show_cleaning_nik_view(self):
-        self._switch_view(self.view_cleaning_nik, "cleaning_nik")
+        self._show_cleaning_nik_r30_view()
+
+    def _show_cleaning_nik_r27_view(self):
+        self._switch_view(self.view_cleaning_nik_r27, "cleaning_nik_r27")
 
     def _show_approve_view(self):
         self._switch_view(self.view_approve, "approve")
@@ -286,48 +335,61 @@ class Fasih3603App(ctk.CTk):
 
         ctk.CTkFrame(box_guide, height=10, fg_color="transparent").pack()
 
-        # Tombol aksi langsung
-        btn_box = ctk.CTkFrame(frame, fg_color="transparent")
-        btn_box.pack(fill="x", padx=25, pady=20)
+        # Tombol aksi langsung (2 baris tertata rapi)
+        btn_box1 = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_box1.pack(fill="x", padx=25, pady=(18, 8))
 
         ctk.CTkButton(
-            btn_box,
-            text="🧹 Buka Modul Data Cleaning",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            height=42,
+            btn_box1,
+            text="🧹 Buka Modul Cleaning Usaha",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
             fg_color="#7c3aed",
             hover_color="#6d28d9",
-            command=self._show_cleaning_view
+            command=self._show_cleaning_usaha_view
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            btn_box,
+            btn_box1,
             text="🏷️ Buka Modul Remark KBLI",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            height=42,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
             fg_color="#0284c7",
             hover_color="#0369a1",
             command=self._show_remark_kbli_view
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            btn_box,
+            btn_box1,
             text="🛒 Buka Modul KBLI Sembako",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            height=42,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
             fg_color="#d97706",
             hover_color="#b45309",
             command=self._show_kbli_sembako_view
+        ).pack(side="left")
+
+        btn_box2 = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_box2.pack(fill="x", padx=25, pady=(0, 20))
+
+        ctk.CTkButton(
+            btn_box2,
+            text="🆔 Buka Modul Cleaning NIK R30",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
+            fg_color="#0d9488",
+            hover_color="#0f766e",
+            command=self._show_cleaning_nik_r30_view
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            btn_box,
-            text="🆔 Buka Modul Cleaning NIK",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            height=42,
-            fg_color="#0d9488",
-            hover_color="#0f766e",
-            command=self._show_cleaning_nik_view
+            btn_box2,
+            text="🆔 Buka Modul Cleaning NIK R27",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
+            fg_color="#4f46e5",
+            hover_color="#4338ca",
+            command=self._show_cleaning_nik_r27_view
         ).pack(side="left")
 
         return frame
@@ -390,12 +452,16 @@ class Fasih3603App(ctk.CTk):
         ctk.set_widget_scaling(self.zoom_level)
 
     def _on_global_enter(self, event=None):
-        if hasattr(self, "view_cleaning") and self.current_view == self.view_cleaning:
-            self.view_cleaning._on_enter_pressed(event)
+        if hasattr(self, "view_cleaning_usaha") and self.current_view == self.view_cleaning_usaha:
+            self.view_cleaning_usaha._on_enter_pressed(event)
         elif hasattr(self, "view_remark_kbli") and self.current_view == self.view_remark_kbli:
             self.view_remark_kbli._on_enter_pressed(event)
-        elif hasattr(self, "view_cleaning_nik") and self.current_view == self.view_cleaning_nik:
-            self.view_cleaning_nik._on_enter_pressed(event)
+        elif hasattr(self, "view_kbli_sembako") and self.current_view == self.view_kbli_sembako:
+            self.view_kbli_sembako._on_enter_pressed(event)
+        elif hasattr(self, "view_cleaning_nik_r30") and self.current_view == self.view_cleaning_nik_r30:
+            self.view_cleaning_nik_r30._on_enter_pressed(event)
+        elif hasattr(self, "view_cleaning_nik_r27") and self.current_view == self.view_cleaning_nik_r27:
+            self.view_cleaning_nik_r27._on_enter_pressed(event)
 
     def _launch_chrome_action(self):
         self.lbl_browser_status.configure(text="🟡 Membuka...", text_color="#f59e0b")
@@ -430,7 +496,14 @@ class Fasih3603App(ctk.CTk):
         # Periksa apakah proses otomasi sedang berjalan di salah satu modul
         from core.event_bus import EngineState
         running_views = []
-        for v in [getattr(self, "view_cleaning", None), getattr(self, "view_remark_kbli", None), getattr(self, "view_cleaning_nik", None)]:
+        all_views = [
+            getattr(self, "view_cleaning_usaha", None),
+            getattr(self, "view_remark_kbli", None),
+            getattr(self, "view_kbli_sembako", None),
+            getattr(self, "view_cleaning_nik_r30", None),
+            getattr(self, "view_cleaning_nik_r27", None)
+        ]
+        for v in all_views:
             if v and hasattr(v, "event_bus") and v.event_bus.get_state() in [EngineState.RUNNING, EngineState.PAUSED]:
                 running_views.append(v)
 

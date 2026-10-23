@@ -15,8 +15,8 @@ from core.event_bus import EngineState
 from core.audit_logger import audit_logger
 from core.window_controller import WindowController
 from core.browser_manager import BrowserManager
-from modules.cleaning_nik.selectors import EXCEL_NIK_COLUMNS_CONFIG, NIK_SELECTORS
-from modules.cleaning_nik.validator import ExcelNIKValidator
+from modules.cleaning_nik_r30.selectors import EXCEL_NIK_COLUMNS_CONFIG, NIK_SELECTORS
+from modules.cleaning_nik_r30.validator import ExcelNIKValidator
 
 def human_jitter(min_sec=0.1, max_sec=0.3, event_bus=None):
     """Jeda acak mikro untuk mensimulasikan interaksi manusia."""
@@ -1206,3 +1206,5 @@ class CleaningNIKEngine:
             "skipped": self.skipped_count,
             "was_stopped": was_stopped
         })
+
+CleaningNIKR30Engine = CleaningNIKEngine

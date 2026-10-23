@@ -11,8 +11,8 @@ if str(APP_DIR) not in sys.path:
 from core.logger import logger
 from core.event_bus import EventBus
 from core.browser_manager import BrowserManager
-from modules.data_cleaning.validator import ExcelValidator
-from modules.data_cleaning.engine import DataCleaningEngine
+from modules.cleaning_usaha.validator import ExcelValidator
+from modules.cleaning_usaha.engine import DataCleaningEngine
 
 def main():
     parser = argparse.ArgumentParser(description="FASIH 3603 Helper - CLI Runner untuk Debugging & Uji Paritas")

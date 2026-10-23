@@ -1,26 +1,32 @@
 import os
+import sys
 import re
 import queue
 import threading
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from pathlib import Path
 import customtkinter as ctk
 
 from config import LOGS_DIR
 from core.logger import logger
 from core.event_bus import EventBus, EngineState
-from modules.data_cleaning.validator import ExcelValidator
-from modules.data_cleaning.engine import DataCleaningEngine
+from modules.cleaning_nik_r30.validator import ExcelNIKValidator
+from modules.cleaning_nik_r30.engine import CleaningNIKEngine
 
-class DataCleaningView(ctk.CTkFrame):
+class CleaningNIKView(ctk.CTkFrame):
+    """
+    Antarmuka pengguna (View) untuk modul Data Cleaning Sosial Ekonomi (NIK).
+    Konsisten 100% dengan tata letak, estetika, dan fungsionalitas modul Data Cleaning & Remark KBLI.
+    """
     def __init__(self, master, event_bus: EventBus = None):
         super().__init__(master, corner_radius=10)
         self.event_bus = event_bus or EventBus()
-        self.worker_thread = None
+
         self.current_excel_path = None
         self.validated_data = None
-        self.tree_item_map = {} # row_idx -> treeview item id
+        self.tree_item_map = {}
+        self.worker_thread = None
         self.log_font_size = 11
         self.current_stats = {"total": 0, "done": 0, "error": 0, "pending": 0}
         self.log_queue = queue.Queue()
@@ -38,7 +44,7 @@ class DataCleaningView(ctk.CTkFrame):
         file_row.pack(fill="x", padx=10, pady=(8, 4))
 
         ctk.CTkLabel(file_row, text="File Excel:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
-        self.entry_file = ctk.CTkEntry(file_row, placeholder_text="Pilih file flag_clean.xlsx...", width=400)
+        self.entry_file = ctk.CTkEntry(file_row, placeholder_text="Pilih file Excel Data Cleaning NIK R30...", width=400)
         self.entry_file.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry_file.bind("<Return>", lambda e: self._on_file_entry_return())
 
@@ -268,7 +274,6 @@ class DataCleaningView(ctk.CTkFrame):
         table_container = ctk.CTkFrame(self.tab_stats, fg_color="#1e293b", corner_radius=8, border_width=1, border_color="#334155")
         table_container.pack(fill="both", expand=True, padx=4, pady=0)
 
-        # Style TTK khusus untuk Treeview Dark Mode
         style = ttk.Style()
         try:
             style.theme_use("clam")
@@ -276,7 +281,7 @@ class DataCleaningView(ctk.CTkFrame):
             pass
 
         style.configure(
-            "Fasih.Treeview",
+            "FasihNIK.Treeview",
             background="#1e293b",
             foreground="#f1f5f9",
             fieldbackground="#1e293b",
@@ -285,7 +290,7 @@ class DataCleaningView(ctk.CTkFrame):
             borderwidth=0
         )
         style.configure(
-            "Fasih.Treeview.Heading",
+            "FasihNIK.Treeview.Heading",
             background="#0f172a",
             foreground="#38bdf8",
             font=("Segoe UI", 10, "bold"),
@@ -293,17 +298,17 @@ class DataCleaningView(ctk.CTkFrame):
             padding=[8, 8]
         )
         style.map(
-            "Fasih.Treeview",
+            "FasihNIK.Treeview",
             background=[("selected", "#0284c7")],
             foreground=[("selected", "#ffffff")]
         )
         style.map(
-            "Fasih.Treeview.Heading",
+            "FasihNIK.Treeview.Heading",
             background=[("active", "#1e293b")],
             foreground=[("active", "#7dd3fc")]
         )
         style.configure(
-            "Fasih.Vertical.TScrollbar",
+            "FasihNIK.Vertical.TScrollbar",
             gripcount=0,
             background="#334155",
             darkcolor="#1e293b",
@@ -313,47 +318,56 @@ class DataCleaningView(ctk.CTkFrame):
             arrowcolor="#94a3b8"
         )
 
-        columns = ("no", "id", "nama_usaha", "tp", "tpend", "ta", "status", "ket")
+        columns = ("no", "baris", "assignment_id", "no_urut_kk", "nama", "nik", "no_kk", "url", "status", "ket")
         self.tree = ttk.Treeview(
             table_container,
             columns=columns,
             show="headings",
             selectmode="browse",
-            style="Fasih.Treeview"
+            style="FasihNIK.Treeview"
         )
 
-        self.tree.heading("no", text="Baris")
-        self.tree.heading("id", text="ID Penugasan")
-        self.tree.heading("nama_usaha", text="Nama Usaha")
-        self.tree.heading("tp", text="Tot. Pengeluaran")
-        self.tree.heading("tpend", text="Tot. Pendapatan")
-        self.tree.heading("ta", text="Tot. Aset")
+        self.tree.heading("no", text="No")
+        self.tree.heading("baris", text="Baris")
+        self.tree.heading("assignment_id", text="Assignment ID")
+        self.tree.heading("no_urut_kk", text="No Urut")
+        self.tree.heading("nama", text="Nama Anggota (ART)")
+        self.tree.heading("nik", text="NIK")
+        self.tree.heading("no_kk", text="No KK")
+        self.tree.heading("url", text="Link Fasih")
         self.tree.heading("status", text="Status")
         self.tree.heading("ket", text="Keterangan")
 
-        self.tree.column("no", width=55, anchor="center")
-        self.tree.column("id", width=125, anchor="w")
-        self.tree.column("nama_usaha", width=230, anchor="w")
-        self.tree.column("tp", width=120, anchor="e")
-        self.tree.column("tpend", width=120, anchor="e")
-        self.tree.column("ta", width=120, anchor="e")
-        self.tree.column("status", width=110, anchor="center")
-        self.tree.column("ket", width=280, anchor="w")
+        self.tree.column("no", width=45, anchor="center")
+        self.tree.column("baris", width=55, anchor="center")
+        self.tree.column("assignment_id", width=130, anchor="center")
+        self.tree.column("no_urut_kk", width=70, anchor="center")
+        self.tree.column("nama", width=180, anchor="w")
+        self.tree.column("nik", width=140, anchor="center")
+        self.tree.column("no_kk", width=140, anchor="center")
+        self.tree.column("url", width=160, anchor="w")
+        self.tree.column("status", width=95, anchor="center")
+        self.tree.column("ket", width=220, anchor="w")
 
-        # Row Tags untuk pewarnaan Zebra dan Status
+        # Tags pewarnaan status baris
         self.tree.tag_configure("even", background="#1e293b")
-        self.tree.tag_configure("odd", background="#151f30")
+        self.tree.tag_configure("odd", background="#182234")
         self.tree.tag_configure("tag_done", foreground="#34d399")
         self.tree.tag_configure("tag_gagal", foreground="#f87171")
-        self.tree.tag_configure("tag_proses", foreground="#38bdf8")
         self.tree.tag_configure("tag_dihentikan", foreground="#fbbf24")
+        self.tree.tag_configure("tag_proses", foreground="#38bdf8")
         self.tree.tag_configure("tag_belum", foreground="#94a3b8")
 
-        scrollbar = ttk.Scrollbar(table_container, orient="vertical", command=self.tree.yview, style="Fasih.Vertical.TScrollbar")
-        self.tree.configure(yscrollcommand=scrollbar.set)
+        vsb = ttk.Scrollbar(table_container, orient="vertical", command=self.tree.yview, style="FasihNIK.Vertical.TScrollbar")
+        hsb = ttk.Scrollbar(table_container, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        self.tree.pack(side="left", fill="both", expand=True, padx=(2, 0), pady=2)
-        scrollbar.pack(side="right", fill="y", padx=(0, 2), pady=2)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        table_container.grid_rowconfigure(0, weight=1)
+        table_container.grid_columnconfigure(0, weight=1)
 
     def _create_metric_card(self, parent, icon, title, initial_value, subtitle, color):
         card = ctk.CTkFrame(
@@ -523,7 +537,7 @@ class DataCleaningView(ctk.CTkFrame):
             padx=12,
             pady=10
         )
-        log_scroll = ttk.Scrollbar(console_container, orient="vertical", command=self.log_text.yview, style="Fasih.Vertical.TScrollbar")
+        log_scroll = ttk.Scrollbar(console_container, orient="vertical", command=self.log_text.yview, style="FasihNIK.Vertical.TScrollbar")
         self.log_text.configure(yscrollcommand=log_scroll.set)
 
         self.log_text.pack(side="left", fill="both", expand=True)
@@ -578,63 +592,69 @@ class DataCleaningView(ctk.CTkFrame):
         return "break"
 
     def _setup_event_listener(self):
-        # Daftarkan callback ke logger
         logger.register_callback(self._on_log_emitted)
-        # Mulai loop polling event bus UI
         self.after(100, self._process_event_bus)
 
     def _on_log_emitted(self, level, message, time_str):
-        # Masukkan ke queue agar diproses secara aman di UI main thread
         self.log_queue.put((level, message, time_str))
 
     def _browse_file(self):
-        filetypes = [("Excel Files", "*.xlsx"), ("All Files", "*.*")]
-        selected = filedialog.askopenfilename(title="Pilih File Excel flag_clean.xlsx", filetypes=filetypes)
-        if selected:
+        file_path = filedialog.askopenfilename(
+            title="Pilih File Excel Data Cleaning NIK",
+            filetypes=[("Excel Files", "*.xlsx *.xlsm"), ("All Files", "*.*")]
+        )
+        if file_path:
             self.entry_file.delete(0, "end")
-            self.entry_file.insert(0, selected)
-            self._validate_and_load(selected)
+            self.entry_file.insert(0, file_path)
+            self._load_and_validate_file(file_path)
 
     def _on_file_entry_return(self):
         pth = self.entry_file.get().strip().strip('"').strip("'")
         if pth:
-            self._validate_and_load(pth)
+            self._load_and_validate_file(pth)
 
     def _download_template(self):
-        dest = filedialog.asksaveasfilename(
-            title="Simpan Template Excel Data Cleaning",
+        dest_path = filedialog.asksaveasfilename(
+            title="Simpan Template Data Cleaning NIK",
             defaultextension=".xlsx",
-            initialfile="template_flag_clean.xlsx",
+            initialfile="Template_Data_Cleaning_NIK_SE2026.xlsx",
             filetypes=[("Excel Files", "*.xlsx"), ("All Files", "*.*")]
         )
-        if not dest:
+        if not dest_path:
             return
 
         try:
-            ExcelValidator.generate_template(dest)
+            ExcelNIKValidator.generate_template_excel(dest_path)
             ans = messagebox.askyesno(
                 "Unduh Template Berhasil",
-                f"Template Excel resmi berhasil disimpan ke:\n{dest}\n\n"
+                f"Template Excel Data Cleaning NIK berhasil disimpan ke:\n{dest_path}\n\n"
                 "Apakah Anda ingin langsung membuka file tersebut sekarang?"
             )
             if ans:
-                os.startfile(dest)
+                os.startfile(dest_path)
         except Exception as e:
-            messagebox.showerror("Gagal Membuat Template", f"Terjadi kesalahan saat membuat file template:\n{e}")
+            messagebox.showerror("Gagal Membuat Template", f"Terjadi kesalahan saat membuat template: {e}")
 
-    def _validate_and_load(self, path_str):
-        self.lbl_validation.configure(text="Sedang memvalidasi file Excel...", text_color="yellow")
-        res = ExcelValidator.validate_excel_file(path_str)
+    def _load_and_validate_file(self, file_path):
+        self.current_excel_path = file_path
+        filename = Path(file_path).name
+
+        self.lbl_validation.configure(text="Sedang memvalidasi template Excel...", text_color="#f59e0b")
+        self.update_idletasks()
+
+        res = ExcelNIKValidator.validate_excel_file(file_path)
         self.validated_data = res
 
         if not res["valid"]:
-            self.lbl_validation.configure(text=f"❌ {res['error']}", text_color="#ef4444")
+            self.lbl_validation.configure(
+                text=f"❌ {res['error']}",
+                text_color="#f87171"
+            )
             self.btn_start.configure(state="disabled")
-            messagebox.showerror("Template Tidak Valid", res["error"])
+            messagebox.showerror("Validasi Template Gagal", f"File '{filename}' tidak memenuhi template:\n\n{res['error']}")
             return
 
-        self.current_excel_path = path_str
-        # Jika template valid dan engine sedang tidak running, aktifkan tombol Mulai Otomasi
+        # Template valid
         if self.event_bus.get_state() != EngineState.RUNNING:
             self.btn_start.configure(state="normal")
             self.btn_pause.configure(state="disabled", text="⏸️ Jeda")
@@ -647,35 +667,32 @@ class DataCleaningView(ctk.CTkFrame):
             )
         else:
             self.lbl_validation.configure(
-                text=f"✅ Template Valid! Total: {res['total_rows']} baris | Belum: {res['pending_rows']} | Selesai: {res['done_rows']}",
+                text=f"✅ Template Valid ({filename}): Total {res['total_rows']} baris ({res['done_rows']} selesai, {res['pending_rows']} siap diproses).",
                 text_color="#10b981"
             )
 
-        # Update status stats
-        self.current_stats = {
-            "total": res["total_rows"],
-            "done": res["done_rows"],
-            "error": 0,
-            "pending": res["pending_rows"]
-        }
-        self.card_total.configure(text=str(res["total_rows"]))
-        self.card_done.configure(text=str(res["done_rows"]))
-        self.card_pending.configure(text=str(res["pending_rows"]))
-        self.card_error.configure(text="0")
-        self.lbl_prog_pct.configure(text=f"0% (0/{res['total_rows']})")
+        total = res["total_rows"]
+        done = res["done_rows"]
+        pending = res["pending_rows"]
 
-        # Muat ke Treeview
+        self.current_stats["total"] = total
+        self.current_stats["done"] = done
+        self.current_stats["pending"] = pending
+        self.current_stats["error"] = 0
+
+        self.card_total.configure(text=str(total))
+        self.card_done.configure(text=str(done))
+        self.card_pending.configure(text=str(pending))
+        self.card_error.configure(text="0")
+        self.lbl_prog_pct.configure(text=f"0% (0/{total})")
+
+        self._populate_table_preview(res)
+        logger.info(f"File Excel NIK berhasil divalidasi: {filename} (Total: {total}, Sisa: {pending})")
+
+    def _populate_table_preview(self, res):
         for item in self.tree.get_children():
             self.tree.delete(item)
         self.tree_item_map.clear()
-
-        def fmt_curr(val):
-            if val is None or str(val).strip() == "":
-                return "-"
-            try:
-                return f"{int(round(float(val))):,}"
-            except Exception:
-                return str(val)
 
         for i, row in enumerate(res["rows_data"]):
             status_str = str(row.get("status") or "").strip().upper()
@@ -684,19 +701,21 @@ class DataCleaningView(ctk.CTkFrame):
                 status_tag = "tag_done"
             elif "GAGAL" in status_str:
                 status_tag = "tag_gagal"
-            elif "DIHENTIKAN" in status_str:
+            elif "DIHENTIKAN" in status_str or "DILEWATI" in status_str:
                 status_tag = "tag_dihentikan"
 
             stripe_tag = "even" if i % 2 == 0 else "odd"
 
             item_id = self.tree.insert("", "end", values=(
+                i + 1,
                 row["row_idx"],
-                row["id"][:12] + "..." if len(row["id"]) > 12 else row["id"],
-                row["nama_usaha"],
-                fmt_curr(row['pengeluaran']),
-                fmt_curr(row['pendapatan']),
-                fmt_curr(row['aset']),
-                row["status"] or "BELUM",
+                row["assignment_id"],
+                row["no_urut_kk"],
+                row["nama"],
+                row["nomor_induk_kependudukan"],
+                row["nomor_kartu_keluarga"],
+                row["url"][:25] + "..." if len(str(row["url"])) > 25 else row["url"],
+                row["status"] or "⏳ BELUM",
                 row["keterangan"] or ""
             ), tags=(stripe_tag, status_tag))
             self.tree_item_map[row["row_idx"]] = item_id
@@ -732,8 +751,7 @@ class DataCleaningView(ctk.CTkFrame):
             messagebox.showwarning("Perhatian", "Silakan pilih file Excel dengan template yang valid terlebih dahulu.")
             return
 
-        # Periksa apakah file sedang dikunci oleh Excel
-        if ExcelValidator.is_file_locked(self.current_excel_path):
+        if ExcelNIKValidator.is_file_locked(self.current_excel_path):
             messagebox.showwarning(
                 "File Excel Terbuka",
                 "File Excel saat ini sedang dibuka di aplikasi Microsoft Excel.\n\n"
@@ -759,7 +777,6 @@ class DataCleaningView(ctk.CTkFrame):
                     self.entry_sso_pass.focus()
                 return
 
-        # Ambil pengaturan rentang baris
         row_start = 2
         row_end = None
         if self.range_var.get() == "custom":
@@ -781,7 +798,6 @@ class DataCleaningView(ctk.CTkFrame):
                     messagebox.showwarning("Rentang Tidak Valid", "Nilai 's.d. Baris' harus berupa angka.")
                     return
 
-        # Ambil pengaturan mode & worker
         debug_review = (self.mode_var.get() == "debug")
         auto_minimize = bool(self.cb_minimize.get())
 
@@ -812,9 +828,8 @@ class DataCleaningView(ctk.CTkFrame):
         }
 
         self.event_bus.reset_controls()
-        engine = DataCleaningEngine(self.current_excel_path, self.event_bus, config_opts)
+        engine = CleaningNIKEngine(self.current_excel_path, self.event_bus, config_opts)
 
-        # Update status tombol UI
         self.btn_start.configure(state="disabled")
         self.btn_pause.configure(state="normal", text="⏸️ Jeda", fg_color="#f59e0b", hover_color="#d97706")
         self.btn_stop.configure(state="normal")
@@ -822,7 +837,7 @@ class DataCleaningView(ctk.CTkFrame):
         if self.btn_confirm_auth.winfo_manager() == "pack":
             self.btn_confirm_auth.pack_forget()
 
-        self.worker_thread = threading.Thread(target=engine.run, daemon=True)
+        self.worker_thread = threading.Thread(target=engine.run, daemon=True, name="CleaningNIK-EngineThread")
         self.worker_thread.start()
 
     def _on_enter_pressed(self, event=None):
@@ -839,28 +854,27 @@ class DataCleaningView(ctk.CTkFrame):
         else:
             self.event_bus.request_pause()
             self.btn_pause.configure(text="▶️ Lanjutkan Otomasi", fg_color="#10b981", hover_color="#059669")
-            self.lbl_active_row.configure(text="⏸️ Otomasi Dijeda oleh pengguna.")
 
     def _stop_automation(self):
-        if messagebox.askyesno("Konfirmasi Berhenti", "Apakah Anda yakin ingin menghentikan otomasi secara aman?"):
+        confirm = messagebox.askyesno(
+            "Konfirmasi Hentikan",
+            "Apakah Anda yakin ingin menghentikan otomasi?\n"
+            "Worker yang sedang berjalan akan menyelesaikan baris saat ini dengan aman lalu berhenti."
+        )
+        if confirm:
+            self.lbl_active_row.configure(text="⏹️ Mengirim sinyal berhenti aman...")
             self.event_bus.request_stop()
-            self.btn_pause.configure(state="disabled")
             self.btn_stop.configure(state="disabled")
-            self.btn_confirm_submit.configure(state="disabled")
-            if self.btn_confirm_auth.winfo_manager() == "pack":
-                self.btn_confirm_auth.pack_forget()
-            self.lbl_active_row.configure(text="⏹️ Menghentikan otomasi secara aman...")
 
     def _confirm_submit_action(self):
         self.btn_confirm_submit.configure(state="disabled")
-        self.lbl_active_row.configure(text="Mengonfirmasi & mengirimkan formulir...")
         self.event_bus.confirm_submit()
 
     def _confirm_auth_action(self):
         if self.btn_confirm_auth.winfo_manager() == "pack":
             self.btn_confirm_auth.pack_forget()
         self.lbl_active_row.configure(text="🟢 Mengonfirmasi status login ke browser...")
-        self.event_bus.confirm_auth_login()
+        self.event_bus.confirm_auth()
 
     def _process_event_bus(self):
         """Memproses event queue dan log terminal dari background worker thread ke UI."""
@@ -894,14 +908,14 @@ class DataCleaningView(ctk.CTkFrame):
         for ev_type, payload in events:
             if ev_type == "row_started":
                 r_idx = payload["row_idx"]
-                nama = payload["nama_usaha"]
+                nama = payload.get("nama_usaha", "")
                 w_id = payload.get("worker_id")
                 w_info = f"[W-{w_id}] " if w_id else ""
                 self.lbl_active_row.configure(text=f"🔄 {w_info}Sedang memproses Baris {r_idx}: {nama}")
                 if r_idx in self.tree_item_map:
                     item_id = self.tree_item_map[r_idx]
                     vals = list(self.tree.item(item_id, "values"))
-                    vals[6] = f"🔄 PROSES (W{w_id})" if w_id else "🔄 PROSES"
+                    vals[8] = f"🔄 PROSES (W{w_id})" if w_id else "🔄 PROSES"
                     old_tags = list(self.tree.item(item_id, "tags"))
                     stripe_tag = "odd" if "odd" in old_tags else "even"
                     self.tree.item(item_id, values=vals, tags=(stripe_tag, "tag_proses"))
@@ -932,27 +946,31 @@ class DataCleaningView(ctk.CTkFrame):
             elif ev_type == "row_completed":
                 r_idx = payload["row_idx"]
                 status = payload["status"]
-                ket = payload["keterangan"]
+                ket = payload.get("keterangan", "")
                 if r_idx in self.tree_item_map:
                     item_id = self.tree_item_map[r_idx]
                     vals = list(self.tree.item(item_id, "values"))
                     old_tags = list(self.tree.item(item_id, "tags"))
                     stripe_tag = "odd" if "odd" in old_tags else "even"
                     if "SUKSES" in status or "DONE" in status:
-                        vals[6] = "✅ SUKSES"
+                        vals[8] = "✅ SUKSES"
                         new_status_tag = "tag_done"
                         self.current_stats["done"] += 1
                         self.current_stats["pending"] = max(0, self.current_stats["pending"] - 1)
                     elif "DIHENTIKAN" in status:
-                        vals[6] = "⏹️ DIHENTIKAN"
+                        vals[8] = "⏹️ DIHENTIKAN"
                         new_status_tag = "tag_dihentikan"
+                    elif "DILEWATI" in status:
+                        vals[8] = "⏭️ DILEWATI"
+                        new_status_tag = "tag_dihentikan"
+                        self.current_stats["pending"] = max(0, self.current_stats["pending"] - 1)
                     else:
-                        vals[6] = "❌ GAGAL"
+                        vals[8] = "❌ GAGAL"
                         new_status_tag = "tag_gagal"
                         self.current_stats["error"] += 1
                         self.current_stats["pending"] = max(0, self.current_stats["pending"] - 1)
 
-                    vals[7] = ket
+                    vals[9] = ket
                     self.tree.item(item_id, values=vals, tags=(stripe_tag, new_status_tag))
 
                     # Update live kartu metrik
@@ -962,9 +980,9 @@ class DataCleaningView(ctk.CTkFrame):
 
             elif ev_type == "waiting_confirm_submit":
                 r_idx = payload["row_idx"]
-                nama = payload["nama_usaha"]
+                nama = payload.get("nama_usaha", "")
                 self.btn_confirm_submit.configure(state="normal", text="✅ Konfirmasi Submit & Lanjut (Enter)")
-                self.lbl_active_row.configure(text=f"🔍 [Review] Baris {r_idx} [{nama}]: Silakan periksa formulir di Chrome, lalu klik konfirmasi atau tekan ENTER.")
+                self.lbl_active_row.configure(text=f"🔍 [Review] Baris {r_idx} [{nama}]: Silakan periksa rincian NIK di Chrome, lalu klik konfirmasi atau tekan ENTER.")
 
             elif ev_type == "progress_updated":
                 curr = payload["current"]
@@ -995,10 +1013,10 @@ class DataCleaningView(ctk.CTkFrame):
                 if is_mid and r_idx:
                     self.lbl_active_row.configure(text=f"🟢 Sesi pulih! Memuat ulang Baris {r_idx}...")
                 else:
-                    self.lbl_active_row.configure(text="🟢 Login SSO Fasih aktif. Memulai pemrosesan data...")
+                    self.lbl_active_row.configure(text="🟢 Login SSO Fasih aktif. Memulai pemrosesan data NIK...")
 
             elif ev_type == "auth_required":
-                messagebox.showwarning("Perhatian SSO", payload["message"])
+                messagebox.showwarning("Perhatian SSO", payload.get("message", "Login SSO Diperlukan."))
 
             elif ev_type == "all_completed":
                 if self.btn_confirm_auth.winfo_manager() == "pack":
@@ -1013,19 +1031,18 @@ class DataCleaningView(ctk.CTkFrame):
                         self.worker_badges[i]["frame"].configure(border_color="#10b981")
                 was_stopped = payload.get("was_stopped", False)
                 if was_stopped:
-                    self.lbl_active_row.configure(text="⏹️ Otomasi telah dihentikan oleh pengguna.")
+                    self.lbl_active_row.configure(text="⏹️ Otomasi Data Cleaning NIK telah dihentikan pengguna.")
                     messagebox.showinfo(
                         "Otomasi Dihentikan",
-                        f"Otomasi dihentikan secara aman.\n- Berhasil (Sesi Ini): {payload['done']}\n- Gagal: {payload['error']}\n- Dilewati (Sudah Selesai): {payload['skipped']}"
+                        f"Otomasi Cleaning NIK dihentikan secara aman.\n- Berhasil: {payload['done']}\n- Gagal: {payload['error']}\n- Dilewati: {payload['skipped']}"
                     )
                 else:
-                    self.lbl_active_row.configure(text="🏁 Seluruh proses otomasi telah selesai!")
+                    self.lbl_active_row.configure(text="🏁 Seluruh proses otomasi Data Cleaning NIK telah selesai!")
                     messagebox.showinfo(
                         "Otomasi Selesai",
-                        f"Pembersihan data selesai!\n- Berhasil (Sesi Ini): {payload['done']}\n- Gagal: {payload['error']}\n- Dilewati (Sudah Selesai): {payload['skipped']}"
+                        f"Otomasi Cleaning NIK selesai!\n- Berhasil: {payload['done']}\n- Gagal: {payload['error']}\n- Dilewati: {payload['skipped']}"
                     )
 
-        # Jadwalkan pemeriksaan berikutnya
         self.after(100, self._process_event_bus)
 
     def _copy_logs(self):
@@ -1039,3 +1056,5 @@ class DataCleaningView(ctk.CTkFrame):
 
     def _open_log_folder(self):
         os.startfile(str(LOGS_DIR))
+
+CleaningNIKR30View = CleaningNIKView
