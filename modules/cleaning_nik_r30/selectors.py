@@ -67,3 +67,6 @@ NIK_SELECTORS = {
     "btn_konfirmasi_kirim": "div:has-text('Konfirmasi Kirim') button:has-text('Konfirmasi'), div:has-text('Apakah Anda yakin') button:has-text('Konfirmasi'), button:has-text('Konfirmasi')",
     "dialog_sukses": "div[role='alertdialog']:has-text('Assignment Berhasil Disubmit'), h2:has-text('Assignment Berhasil Disubmit'), p:has-text('Perubahan Anda berhasil disimpan'), div[role='dialog']:has-text('Berhasil')"
 }
+
+EXCEL_NIK_R30_COLUMNS_CONFIG = EXCEL_NIK_COLUMNS_CONFIG
+NIK_R30_SELECTORS = NIK_SELECTORS

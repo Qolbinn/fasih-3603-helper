@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import openpyxl
-from modules.data_cleaning.selectors import EXCEL_COLUMNS_CONFIG
+from modules.cleaning_usaha.selectors import EXCEL_COLUMNS_CONFIG
 
 class ExcelValidator:
     MANDATORY_KEYS = [

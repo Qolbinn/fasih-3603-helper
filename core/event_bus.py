@@ -97,6 +97,10 @@ class EventBus:
         """Dipanggil dari UI saat pengguna mengonfirmasi manual bahwa sudah login di browser."""
         self._auth_confirm_event.set()
 
+    def confirm_auth(self):
+        """Alias untuk confirm_auth_login demi kompatibilitas menyeluruh antar modul."""
+        self.confirm_auth_login()
+
     def reset_auth_confirmation(self):
         """Mereset status konfirmasi login manual."""
         self._auth_confirm_event.clear()
@@ -104,3 +108,8 @@ class EventBus:
     def is_auth_confirmed(self):
         """Memeriksa apakah ada konfirmasi manual login dari pengguna."""
         return self._auth_confirm_event.is_set()
+
+    def wait_for_auth_confirmation(self, poll_interval=0.1):
+        """Memblokir thread sampai pengguna mengonfirmasi login di UI atau stop requested."""
+        while not self._auth_confirm_event.is_set() and not self.is_stop_requested():
+            self._auth_confirm_event.wait(timeout=poll_interval)

@@ -179,3 +179,10 @@ class WindowController:
             except Exception:
                 pass
         return success
+
+    @classmethod
+    def restore_browser(cls):
+        """
+        Alias untuk restore_and_focus_browser demi kompatibilitas pemanggilan.
+        """
+        return cls.restore_and_focus_browser()

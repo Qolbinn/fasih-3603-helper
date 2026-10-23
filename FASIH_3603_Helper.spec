@@ -1,25 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
-conda_bin = 'C:/Users/Qolbin/anaconda3/envs/automation/Library/bin'
-
-conda_dlls = [
-    'tcl86t.dll',
-    'tk86t.dll',
-    'ffi.dll',
-    'ffi-8.dll',
-    'libcrypto-3-x64.dll',
-    'libssl-3-x64.dll',
-    'liblzma.dll',
-    'libexpat.dll'
-]
-
 a = Analysis(
     ['D:/3603 BPS Kab Tangerang/2026/Sensus Ekonomi/Anomali/Fasih 3603 Helper/main.py'],
     pathex=['C:/Users/Qolbin/anaconda3/envs/automation/Library/bin'],
-    binaries=[(f'{conda_bin}/{dll}', '.') for dll in conda_dlls],
+    binaries=[],
     datas=[('C:/Users/Qolbin/anaconda3/envs/automation/Lib/site-packages/customtkinter', 'customtkinter'), ('D:/3603 BPS Kab Tangerang/2026/Sensus Ekonomi/Anomali/Fasih 3603 Helper/assets', 'assets')],
-    hiddenimports=['customtkinter', 'playwright', 'openpyxl', 'win32gui', 'win32con', 'win32process', 'psutil', 'modules.data_cleaning', 'modules.approve_se2026', 'modules.remark_kbli', 'modules.cleaning_nik', 'modules.kbli_sembako'],
+    hiddenimports=['customtkinter', 'playwright', 'openpyxl', 'win32gui', 'win32con', 'win32process', 'psutil', 'modules.cleaning_usaha', 'modules.approve_se2026', 'modules.remark_kbli', 'modules.kbli_sembako', 'modules.cleaning_nik_r30', 'modules.cleaning_nik_r27'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

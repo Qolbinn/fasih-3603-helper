@@ -5,7 +5,7 @@
 ; Cukup ubah MyAppVersion di bawah saat ada rilis versi baru.
 
 #define MyAppName "FASIH 3603 Helper"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.4.0"
 #define MyAppPublisher "BPS Kabupaten Tangerang"
 #define MyAppURL "https://tangerangkab.bps.go.id"
 #define MyAppExeName "FASIH_3603_Helper.exe"

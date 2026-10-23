@@ -15,7 +15,7 @@ from core.event_bus import EngineState
 from core.audit_logger import audit_logger
 from core.window_controller import WindowController
 from core.browser_manager import BrowserManager
-from modules.data_cleaning.selectors import (
+from modules.cleaning_usaha.selectors import (
     PENGELUARAN_MAP,
     PENDAPATAN_MAP,
     ASET_MAP,
@@ -29,7 +29,7 @@ from modules.data_cleaning.selectors import (
     KONFIRMASI_KIRIM_BUTTON_SELECTOR,
     SUCCESS_SUBMIT_DIALOG_SELECTOR
 )
-from modules.data_cleaning.validator import ExcelValidator
+from modules.cleaning_usaha.validator import ExcelValidator
 
 # ==============================================================================
 # HELPER BEHAVIOR MANUSIA & PLAYWRIGHT
@@ -1322,3 +1322,5 @@ class DataCleaningEngine:
                 "skipped": self.skipped_count,
                 "was_stopped": was_stopped
             })
+
+CleaningUsahaEngine = DataCleaningEngine

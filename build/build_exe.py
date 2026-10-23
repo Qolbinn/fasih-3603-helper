@@ -61,8 +61,12 @@ def build():
         "--hidden-import=win32con",
         "--hidden-import=win32process",
         "--hidden-import=psutil",
-        "--hidden-import=modules.data_cleaning",
+        "--hidden-import=modules.cleaning_usaha",
         "--hidden-import=modules.approve_se2026",
+        "--hidden-import=modules.remark_kbli",
+        "--hidden-import=modules.kbli_sembako",
+        "--hidden-import=modules.cleaning_nik_r30",
+        "--hidden-import=modules.cleaning_nik_r27",
         f"--workpath={str(BUILD_CACHE)}",
         f"--distpath={str(DIST_DIR)}",
         str(ROOT_DIR / "main.py")
@@ -108,10 +112,39 @@ def build():
                         print(f"[Warning] Gagal menyalin {dll_name}: {e}")
 
         print("\n========================================================")
-        print("[SUKSES] BUILD BERHASIL!")
+        print("[SUKSES] BUILD PYINSTALLER BERHASIL!")
         print(f"Folder aplikasi: {DIST_DIR / 'FASIH_3603_Helper'}")
-        print("Jalankan: FASIH_3603_Helper.exe di dalam folder tersebut.")
         print("========================================================")
+
+        # Build Inno Setup Installer
+        iscc_candidates = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 7" / "ISCC.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
+            Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe"),
+            Path("C:/Program Files/Inno Setup 6/ISCC.exe"),
+            Path("C:/Program Files (x86)/Inno Setup 7/ISCC.exe"),
+            Path("C:/Program Files/Inno Setup 7/ISCC.exe"),
+        ]
+        iscc_exe = None
+        for cand in iscc_candidates:
+            if cand.exists():
+                iscc_exe = cand
+                break
+
+        iss_file = ROOT_DIR / "build" / "installer.iss"
+        if iscc_exe and iss_file.exists():
+            print("\n[Installer] Membangun Setup Installer Inno Setup...")
+            iscc_cmd = [str(iscc_exe), str(iss_file)]
+            res_iscc = subprocess.run(iscc_cmd)
+            if res_iscc.returncode == 0:
+                print("\n========================================================")
+                print("[SUKSES] INSTALLER INNO SETUP BERHASIL DIBUAT!")
+                print(f"Folder Output: {ROOT_DIR / 'dist_installer'}")
+                print("========================================================")
+            else:
+                print(f"[Warning] Inno Setup compiler gagal dengan kode: {res_iscc.returncode}")
+        else:
+            print("[Info] ISCC.exe tidak ditemukan atau installer.iss belum siap. Melewati pembuatan installer.")
     else:
         print(f"\n[Error] Build gagal dengan kode: {res.returncode}")
 

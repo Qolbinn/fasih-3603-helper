@@ -112,9 +112,35 @@ class BrowserManager:
             if "sso.bps.go.id" in netloc or "sso" in netloc:
                 return True
 
-            # 2. Cek jika berada di path auth login
-            if "/auth/login" in path or path.endswith("/login"):
-                return True
+            # 2. Cek jika berada di path auth login atau root app (belum login)
+            if "/auth/login" in path or path.endswith("/login") or path in ["/app", ""]:
+                # Pada path /app atau root, cek apakah ada elemen login atau tidak ada elemen auth
+                for sel in login_indicators:
+                    try:
+                        loc = page.locator(sel).first
+                        if loc.count() > 0 and loc.is_visible():
+                            return True
+                    except Exception:
+                        pass
+                auth_selectors = [
+                    "a[href*='logout']",
+                    "button:has-text('Logout')",
+                    "button:has-text('Keluar')",
+                    ".fasih-form-sidebar",
+                    "a:has-text('Survei')",
+                    "a:has-text('Penugasan')"
+                ]
+                has_auth = False
+                for sel in auth_selectors:
+                    try:
+                        loc = page.locator(sel).first
+                        if loc.count() > 0 and loc.is_visible():
+                            has_auth = True
+                            break
+                    except Exception:
+                        pass
+                if not has_auth:
+                    return True
 
             # 3. Pengecekan elemen DOM spesifik halaman login Fasih
             login_indicators = [
@@ -150,7 +176,7 @@ class BrowserManager:
         1. Harus berada di domain fasih-sm.bps.go.id.
         2. TIDAK boleh berada di SSO BPS atau path /auth/login.
         3. TIDAK boleh ada elemen login ("Lanjutkan dengan SSO", "Selamat Datang Kembali", dsb).
-        4. Jika poin 1, 2, dan 3 terpenuhi, maka halaman dianggap sudah login.
+        4. Pada path root (/app), harus terkonfirmasi memiliki indikator autentikasi (logout, menu survei, dsb).
         """
         try:
             if not page or page.is_closed():
@@ -195,7 +221,28 @@ class BrowserManager:
                 except Exception:
                     pass
 
-            # 3. Indikator internal Fasih (survei, penugasan, monitoring, dashboard, dll)
+            # 3. Daftar indikator DOM autentikasi eksplisit
+            auth_selectors = [
+                "a[href*='logout']",
+                "button:has-text('Logout')",
+                "button:has-text('Keluar')",
+                ".fasih-form-sidebar",
+                "a:has-text('Survei')",
+                "a:has-text('Penugasan')"
+            ]
+
+            # 4. Jika path adalah root /app atau root kosong
+            if path in ["/app", ""]:
+                for sel in auth_selectors:
+                    try:
+                        loc = page.locator(sel).first
+                        if loc.count() > 0 and loc.is_visible():
+                            return True
+                    except Exception:
+                        pass
+                return False
+
+            # 5. Indikator internal Fasih (survei, penugasan, monitoring, dashboard, dll)
             auth_subpaths = [
                 "/surveys",
                 "/survey",
@@ -209,17 +256,17 @@ class BrowserManager:
                 "/wilayah"
             ]
             if any(p in path for p in auth_subpaths):
+                # Pastikan tidak ada form login yang menutupi
+                for sel in login_selectors:
+                    try:
+                        loc = page.locator(sel).first
+                        if loc.count() > 0 and loc.is_visible():
+                            return False
+                    except Exception:
+                        pass
                 return True
 
-            # 4. Fallback DOM di path lain
-            auth_selectors = [
-                "a[href*='logout']",
-                "button:has-text('Logout')",
-                "button:has-text('Keluar')",
-                ".fasih-form-sidebar",
-                "a:has-text('Survei')",
-                "a:has-text('Penugasan')"
-            ]
+            # 6. Fallback DOM di path lain
             for sel in auth_selectors:
                 try:
                     loc = page.locator(sel).first
@@ -228,8 +275,7 @@ class BrowserManager:
                 except Exception:
                     pass
 
-            # Jika berada di domain fasih-sm.bps.go.id dan tidak ada elemen login sama sekali
-            return True
+            return False
         except Exception:
             return False
 

@@ -4,7 +4,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from modules.cleaning_nik.selectors import EXCEL_NIK_COLUMNS_CONFIG
+from modules.cleaning_nik_r30.selectors import EXCEL_NIK_COLUMNS_CONFIG
 
 class ExcelNIKValidator:
     MANDATORY_KEYS = [
@@ -281,3 +281,5 @@ class ExcelNIKValidator:
 
         wb.save(output_path)
         return True
+
+ExcelNIKR30Validator = ExcelNIKValidator
