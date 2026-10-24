@@ -40,10 +40,20 @@ class Fasih3603App(ctk.CTk):
         self.geometry("1120x740")
         self.minsize(980, 640)
 
+        self.event_bus = EventBus()
+        self.current_view = None
+        self.zoom_level = 1.0
+
+        self._build_main_layout()
+        self._start_browser_status_monitor()
+
         # Set Window and Taskbar Icon (Native Multi-Resolution & Win32 Integration)
         self._apply_window_icon()
         self.after(200, self._apply_window_icon)
         self.after(600, self._apply_window_icon)
+
+        self.bind("<Return>", self._on_global_enter)
+        self.protocol("WM_DELETE_WINDOW", self._on_window_closing)
 
     def _apply_window_icon(self):
         """Menerapkan ikon aplikasi multi-resolusi ke taskbar dan title bar Windows."""
@@ -74,15 +84,6 @@ class Fasih3603App(ctk.CTk):
                     win32gui.SendMessage(hwnd, win32con.WM_SETICON, win32con.ICON_SMALL, hicon_small)
             except Exception:
                 pass
-
-        self.event_bus = EventBus()
-        self.current_view = None
-        self.zoom_level = 1.0
-
-        self._build_main_layout()
-        self._start_browser_status_monitor()
-        self.bind("<Return>", self._on_global_enter)
-        self.protocol("WM_DELETE_WINDOW", self._on_window_closing)
 
     def _build_main_layout(self):
         # 1. Top Bar: Header & Chrome CDP Launcher & Zoom
@@ -449,6 +450,7 @@ class Fasih3603App(ctk.CTk):
 
     def _apply_zoom(self):
         self.lbl_zoom.configure(text=f"{int(round(self.zoom_level * 100))}%")
+        self.update_idletasks()
         ctk.set_widget_scaling(self.zoom_level)
 
     def _on_global_enter(self, event=None):
@@ -473,20 +475,33 @@ class Fasih3603App(ctk.CTk):
         else:
             self.lbl_browser_status.configure(text="🟢 Browser Aktif", text_color="#34d399")
 
+    def _safe_update_browser_status(self, text, color):
+        try:
+            if hasattr(self, "lbl_browser_status") and self.winfo_exists():
+                self.lbl_browser_status.configure(text=text, text_color=color)
+        except Exception:
+            pass
+
     def _start_browser_status_monitor(self):
         def monitor():
             while True:
+                try:
+                    if not self.winfo_exists():
+                        break
+                except Exception:
+                    break
+
                 active, name = BrowserManager.is_cdp_running(timeout=1.0)
-                if active:
-                    self.lbl_browser_status.configure(
-                        text=f"🟢 Terhubung ({name})",
-                        text_color="#34d399"
-                    )
-                else:
-                    self.lbl_browser_status.configure(
-                        text="🔴 Chrome Belum Aktif",
-                        text_color="#f87171"
-                    )
+                try:
+                    if not self.winfo_exists():
+                        break
+                    if active:
+                        self.after(0, lambda n=name: self._safe_update_browser_status(f"🟢 Terhubung ({n})", "#34d399"))
+                    else:
+                        self.after(0, lambda: self._safe_update_browser_status("🔴 Chrome Belum Aktif", "#f87171"))
+                except Exception:
+                    break
+
                 threading.Event().wait(3.0)
 
         t = threading.Thread(target=monitor, daemon=True)
