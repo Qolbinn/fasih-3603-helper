@@ -20,6 +20,7 @@ from modules.remark_kbli.view import RemarkKBLIView
 from modules.kbli_sembako.view import KBLISembakoView
 from modules.kbli_pmm.view import KBLIPMMView
 from modules.cleaning_nik_r30.view import CleaningNIKR30View, CleaningNIKView
+from modules.cleaning_nik_r29.view import CleaningNIKR29View
 from modules.cleaning_nik_r27.view import CleaningNIKR27View
 
 if sys.platform == "win32":
@@ -216,6 +217,7 @@ class Fasih3603App(ctk.CTk):
         self._add_nav_item("kbli_sembako", "🛒 KBLI Sembako SE2026", self._show_kbli_sembako_view)
         self._add_nav_item("kbli_pmm", "📦 KBLI PMM SE2026", self._show_kbli_pmm_view)
         self._add_nav_item("cleaning_nik_r30", "🆔 Cleaning NIK R30 SE2026", self._show_cleaning_nik_r30_view)
+        self._add_nav_item("cleaning_nik_r29", "🆔 Cleaning NIK R29 SE2026", self._show_cleaning_nik_r29_view)
         self._add_nav_item("cleaning_nik_r27", "🆔 Cleaning NIK R27 SE2026", self._show_cleaning_nik_r27_view)
         self._add_nav_item("approve", "✅ Approve SE 2026 (Soon)", self._show_approve_view)
         self._add_nav_item("pengaturan", "⚙️ Pengaturan & Info", self._show_settings_view)
@@ -235,6 +237,7 @@ class Fasih3603App(ctk.CTk):
         self.view_kbli_sembako = KBLISembakoView(self.container, EventBus())
         self.view_kbli_pmm = KBLIPMMView(self.container, EventBus())
         self.view_cleaning_nik_r30 = CleaningNIKR30View(self.container, EventBus())
+        self.view_cleaning_nik_r29 = CleaningNIKR29View(self.container, EventBus())
         self.view_cleaning_nik_r27 = CleaningNIKR27View(self.container, EventBus())
         self.view_approve = ApproveSE2026View(self.container)
         self.view_home = self._create_home_view()
@@ -296,6 +299,9 @@ class Fasih3603App(ctk.CTk):
 
     def _show_cleaning_nik_view(self):
         self._show_cleaning_nik_r30_view()
+
+    def _show_cleaning_nik_r29_view(self):
+        self._switch_view(self.view_cleaning_nik_r29, "cleaning_nik_r29")
 
     def _show_cleaning_nik_r27_view(self):
         self._switch_view(self.view_cleaning_nik_r27, "cleaning_nik_r27")
@@ -383,6 +389,16 @@ class Fasih3603App(ctk.CTk):
             fg_color="#d97706",
             hover_color="#b45309",
             command=self._show_kbli_sembako_view
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            btn_box1,
+            text="📦 Buka Modul KBLI PMM",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
+            fg_color="#e11d48",
+            hover_color="#be123c",
+            command=self._show_kbli_pmm_view
         ).pack(side="left")
 
         btn_box2 = ctk.CTkFrame(frame, fg_color="transparent")
@@ -400,22 +416,22 @@ class Fasih3603App(ctk.CTk):
 
         ctk.CTkButton(
             btn_box2,
+            text="🆔 Buka Modul Cleaning NIK R29",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
+            fg_color="#059669",
+            hover_color="#047857",
+            command=self._show_cleaning_nik_r29_view
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            btn_box2,
             text="🆔 Buka Modul Cleaning NIK R27",
             font=ctk.CTkFont(size=12, weight="bold"),
             height=40,
             fg_color="#4f46e5",
             hover_color="#4338ca",
             command=self._show_cleaning_nik_r27_view
-        ).pack(side="left", padx=(0, 10))
-
-        ctk.CTkButton(
-            btn_box2,
-            text="📦 Buka Modul KBLI PMM",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            height=40,
-            fg_color="#e11d48",
-            hover_color="#be123c",
-            command=self._show_kbli_pmm_view
         ).pack(side="left")
 
         return frame

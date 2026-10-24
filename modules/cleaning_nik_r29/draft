@@ -1,0 +1,10 @@
+kolom2 yang dipakai di excel untuk cleaning nik R29 adalah :
+no_urut_kk, nik_dtsen, nik_length, matched, nama_dtsen, dan url
+
+jadi, pencarian anggota keluarga untuk cleaning NIK nya nanti berdasarkan nama_dtsen. Jika sudah ketemu, cek apakah benar anggota keluarga nomor urut ke no_urut_kk, kemudian cek juga apakah NIK anggota keluarga tsb yang ada di eform fasih sama dengan nik_dtsen di excel
+
+Jika itu semua sudah sesuai, langkah berikutnya :
+1. Cek di kolom nik_matched di excel
+2. Jika nik_matched kosong dan nik_length = 16, maka NIK di eform jangan diubah, lalu beri remarks #0
+3. Jika nik_matched = 7777, isikan ke NIK eform 7777 dan beri remark #0
+4. Jika nik_mat
