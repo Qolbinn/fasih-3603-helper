@@ -154,6 +154,26 @@ def add_remarks_to_element(page, container_selector, note_text, event_bus=None, 
 
     random_sleep(0.4, 0.7, event_bus=event_bus)
 
+def _add_remarks_to_master_kbli_if_visible(page, note_text, master_selector, event_bus=None, worker_prefix=""):
+    """
+    Memeriksa apakah rincian Master KBLI (div[id^='kbli#'], div[id='kbli']) ada dan terlihat di form.
+    Jika ada dan visible: buka modal catatan, isi catatan (#0 atau #4), simpan, dan tutup.
+    Jika tidak ada atau tersembunyi: lewati secara aman tanpa error.
+    """
+    if event_bus and event_bus.is_stop_requested():
+        return False
+    try:
+        master_container = page.locator(master_selector).first
+        if master_container.count() > 0 and master_container.is_visible():
+            logger.bot(f"{worker_prefix}Rincian Master KBLI terdeteksi aktif. Memberikan Catatan '{note_text}' pada rincian kbli...")
+            add_remarks_to_element(page, master_selector, note_text, event_bus=event_bus, worker_prefix=worker_prefix)
+            return True
+        else:
+            return False
+    except Exception as e:
+        logger.warning(f"⚠️ {worker_prefix}Peringatan saat memberikan catatan pada Master KBLI: {e}")
+        return False
+
 def _ensure_blok2_and_usaha_menu_expanded(page, event_bus=None, worker_prefix=""):
     """
     Memastikan menu Blok II dan sub-menu 'Keterangan Usaha/Perusahaan' di sidebar
@@ -609,12 +629,14 @@ def _process_kbli_verification(page, kbli_lama, st_kbli, kbli_baru, event_bus=No
         if st_norm == "tetap":
             logger.bot(f"{worker_prefix}Status KBLI 'Tetap'. Memberikan Catatan #0 pada rincian kbli_genai...")
             add_remarks_to_element(page, KBLI_SEMBAKO_SELECTORS["container_kbli_genai"], "#0", event_bus=event_bus, worker_prefix=worker_prefix)
+            _add_remarks_to_master_kbli_if_visible(page, "#0", KBLI_SEMBAKO_SELECTORS["container_master_kbli"], event_bus=event_bus, worker_prefix=worker_prefix)
             return True, "SUKSES", f"KBLI Tetap ({kbli_lama_clean}) diremark #0"
         elif st_norm == "ganti":
             logger.bot(f"{worker_prefix}Status KBLI 'Ganti'. Mengubah Master KBLI ke '{kbli_baru}'...")
             _fill_master_kbli(page, kbli_baru, event_bus=event_bus, worker_prefix=worker_prefix)
             logger.bot(f"{worker_prefix}Memberikan Catatan #4 pada rincian kbli_genai...")
             add_remarks_to_element(page, KBLI_SEMBAKO_SELECTORS["container_kbli_genai"], "#4", event_bus=event_bus, worker_prefix=worker_prefix)
+            _add_remarks_to_master_kbli_if_visible(page, "#4", KBLI_SEMBAKO_SELECTORS["container_master_kbli"], event_bus=event_bus, worker_prefix=worker_prefix)
             return True, "SUKSES", f"KBLI Diganti ({kbli_lama_clean} -> {kbli_baru}) diremark #4"
         else:
             return False, "DILEWATI", f"Status_KBLI '{st_kbli}' tidak valid (hanya 'Tetap' atau 'Ganti')"
@@ -661,6 +683,7 @@ def _process_kbli_verification(page, kbli_lama, st_kbli, kbli_baru, event_bus=No
         if st_norm == "tetap":
             logger.bot(f"{worker_prefix}Status KBLI 'Tetap'. Memberikan Catatan #0 pada rincian kbli_genai...")
             add_remarks_to_element(page, KBLI_SEMBAKO_SELECTORS["container_kbli_genai"], "#0", event_bus=event_bus, worker_prefix=worker_prefix)
+            _add_remarks_to_master_kbli_if_visible(page, "#0", KBLI_SEMBAKO_SELECTORS["container_master_kbli"], event_bus=event_bus, worker_prefix=worker_prefix)
             return True, "SUKSES", f"KBLI Tetap ({kbli_lama_clean}) diremark #0"
         elif st_norm == "ganti":
             logger.bot(f"{worker_prefix}Status KBLI 'Ganti' pada Kondisi 2. Memilih opsi 'Pilih dari Master KBLI'...")
@@ -676,6 +699,7 @@ def _process_kbli_verification(page, kbli_lama, st_kbli, kbli_baru, event_bus=No
 
             logger.bot(f"{worker_prefix}Memberikan Catatan #4 pada rincian kbli_genai...")
             add_remarks_to_element(page, KBLI_SEMBAKO_SELECTORS["container_kbli_genai"], "#4", event_bus=event_bus, worker_prefix=worker_prefix)
+            _add_remarks_to_master_kbli_if_visible(page, "#4", KBLI_SEMBAKO_SELECTORS["container_master_kbli"], event_bus=event_bus, worker_prefix=worker_prefix)
             return True, "SUKSES", f"KBLI Diganti ({kbli_lama_clean} -> {kbli_baru}) diremark #4"
         else:
             return False, "DILEWATI", f"Status_KBLI '{st_kbli}' tidak valid (hanya 'Tetap' atau 'Ganti')"

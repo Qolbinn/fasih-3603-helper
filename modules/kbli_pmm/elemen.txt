@@ -1,0 +1,58 @@
+================================================================================
+DOKUMENTASI ELEMEN & ALGORITMA FASIH - KBLI PMM SE2026
+================================================================================
+
+ALUR PENGERJAAN:
+Sama seperti modul remark_kbli.
+Perbedaan berada pada proses antara setelah cek keg_utama sampai pengecekan KBLI nya:
+
+1. Cek di kolom kbli_akhir: 56101 atau 56102
+2. Isi rincian apakah produksi barang sendiri (id: produk_sendiri / 13. b1) -> 2. Tidak (value='2')
+3. Isi rincian menyediakan layanan makan minum (id: layanan_mamin / 13. b2) -> 1. Ya (value='1')
+4. Isi rincian lokasi_usaha (id: lokasi_usaha / 13. c):
+   * Muncul dinamis setelah 13. b2 diisi 1. Ya.
+   - Jika 56101 -> 9. Restoran, warung makan, dan sejenisnya (value='09')
+   - Jika 56102 -> 5. Kedai, stan, tenda (value='05')
+     KECUALI jika terdapat warning/info Usaha Keliling (R.9a=2), maka dipilih:
+     10. Keliling (value='10')
+
+================================================================================
+ELEMEN HTML RINCIAN:
+================================================================================
+
+# 1. PRODUK SENDIRI (13. b1)
+Container: div[id^='produk_sendiri#'], div[id='produk_sendiri']
+Pertanyaan: 13. b1. Apakah memproduksi barang di lokasi ini?
+Opsi:
+  - 1. Ya (value="1")
+  - 2. Tidak (value="2") -> TARGET PMM
+
+# 2. LAYANAN MAMIN (13. b2)
+Container: div[id^='layanan_mamin#'], div[id='layanan_mamin']
+Pertanyaan: 13. b2. Apakah menyediakan layanan makan minum?
+Opsi:
+  - 1. Ya (value="1") -> TARGET PMM
+  - 2. Tidak (value="2")
+
+# 3. LOKASI USAHA (13. c)
+Container: div[id^='lokasi_usaha#'], div[id='lokasi_usaha']
+Pertanyaan: 13. c. Di mana usaha tersebut biasa dilakukan?
+Opsi:
+  - 01: 1. Apotek
+  - 02: 2. Swalayan
+  - 03: 3. Los Pasar
+  - 04: 4. Toko, ruko, dan sejenisnya
+  - 05: 5. Kedai, stan, tenda -> TARGET JIKA KBLI 56102 (standar)
+  - 06: 6. Bar
+  - 07: 7. Kelab malam, diskotek
+  - 08: 8. Kafe
+  - 09: 9. Restoran, warung makan, dan sejenisnya -> TARGET JIKA KBLI 56101
+  - 10: 10. Keliling -> TARGET JIKA KBLI 56102 & TERDAPAT WARNING USAHA KELILING
+  - 11: 11. Daring (online)
+
+Elemen Warning Usaha Keliling pada Lokasi Usaha:
+<div class="tw:space-y-2 tw:font-bold tw:text-xs tw:text-destructive">
+  <div class="tw:flex tw:flex-row tw:items-start tw:space-x-2">
+    <span>Jika R.9a diisi kode 2 (Usaha Keliling), maka R.13c diisi kode 10 (Usaha Keliling)</span>
+  </div>
+</div>
