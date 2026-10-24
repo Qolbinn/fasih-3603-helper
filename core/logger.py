@@ -38,7 +38,16 @@ class AppLogger:
         formatted = f"[{time_str}] [{level.upper()}] {message}"
 
         # Tulis ke terminal lokal
-        print(formatted)
+        try:
+            print(formatted)
+        except (UnicodeEncodeError, Exception):
+            try:
+                if hasattr(sys.stdout, "buffer"):
+                    sys.stdout.buffer.write((formatted + "\n").encode("utf-8", errors="replace"))
+                else:
+                    print(formatted.encode("ascii", errors="replace").decode("ascii"))
+            except Exception:
+                pass
 
         # Tulis ke file log harian secara thread-safe
         try:

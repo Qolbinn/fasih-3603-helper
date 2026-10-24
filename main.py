@@ -18,13 +18,14 @@ from modules.cleaning_usaha.view import CleaningUsahaView, DataCleaningView
 from modules.approve_se2026.view import ApproveSE2026View
 from modules.remark_kbli.view import RemarkKBLIView
 from modules.kbli_sembako.view import KBLISembakoView
+from modules.kbli_pmm.view import KBLIPMMView
 from modules.cleaning_nik_r30.view import CleaningNIKR30View, CleaningNIKView
 from modules.cleaning_nik_r27.view import CleaningNIKR27View
 
 if sys.platform == "win32":
     try:
         import ctypes
-        myappid = f"bps3603.fasihhelper.desktop.{APP_VERSION}"
+        myappid = "bps3603.fasihhelper.desktop"
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
         pass
@@ -64,6 +65,13 @@ class Fasih3603App(ctk.CTk):
         except Exception:
             pass
 
+        try:
+            if APP_LOGO_64.exists():
+                self._icon_photo_ref = tk.PhotoImage(file=str(APP_LOGO_64))
+                self.iconphoto(True, self._icon_photo_ref)
+        except Exception:
+            pass
+
         if sys.platform == "win32" and APP_ICON_ICO.exists():
             try:
                 import win32gui
@@ -80,8 +88,10 @@ class Fasih3603App(ctk.CTk):
                 )
                 if hicon_big:
                     win32gui.SendMessage(hwnd, win32con.WM_SETICON, win32con.ICON_BIG, hicon_big)
+                    win32gui.SendMessage(self.winfo_id(), win32con.WM_SETICON, win32con.ICON_BIG, hicon_big)
                 if hicon_small:
                     win32gui.SendMessage(hwnd, win32con.WM_SETICON, win32con.ICON_SMALL, hicon_small)
+                    win32gui.SendMessage(self.winfo_id(), win32con.WM_SETICON, win32con.ICON_SMALL, hicon_small)
             except Exception:
                 pass
 
@@ -204,6 +214,7 @@ class Fasih3603App(ctk.CTk):
         self._add_nav_item("cleaning_usaha", "🧹 Cleaning Usaha SE2026", self._show_cleaning_usaha_view)
         self._add_nav_item("remark_kbli", "🏷️ Remark KBLI SE2026", self._show_remark_kbli_view)
         self._add_nav_item("kbli_sembako", "🛒 KBLI Sembako SE2026", self._show_kbli_sembako_view)
+        self._add_nav_item("kbli_pmm", "📦 KBLI PMM SE2026", self._show_kbli_pmm_view)
         self._add_nav_item("cleaning_nik_r30", "🆔 Cleaning NIK R30 SE2026", self._show_cleaning_nik_r30_view)
         self._add_nav_item("cleaning_nik_r27", "🆔 Cleaning NIK R27 SE2026", self._show_cleaning_nik_r27_view)
         self._add_nav_item("approve", "✅ Approve SE 2026 (Soon)", self._show_approve_view)
@@ -222,6 +233,7 @@ class Fasih3603App(ctk.CTk):
         self.view_cleaning_usaha = CleaningUsahaView(self.container, EventBus())
         self.view_remark_kbli = RemarkKBLIView(self.container, EventBus())
         self.view_kbli_sembako = KBLISembakoView(self.container, EventBus())
+        self.view_kbli_pmm = KBLIPMMView(self.container, EventBus())
         self.view_cleaning_nik_r30 = CleaningNIKR30View(self.container, EventBus())
         self.view_cleaning_nik_r27 = CleaningNIKR27View(self.container, EventBus())
         self.view_approve = ApproveSE2026View(self.container)
@@ -275,6 +287,9 @@ class Fasih3603App(ctk.CTk):
 
     def _show_kbli_sembako_view(self):
         self._switch_view(self.view_kbli_sembako, "kbli_sembako")
+
+    def _show_kbli_pmm_view(self):
+        self._switch_view(self.view_kbli_pmm, "kbli_pmm")
 
     def _show_cleaning_nik_r30_view(self):
         self._switch_view(self.view_cleaning_nik_r30, "cleaning_nik_r30")
@@ -391,6 +406,16 @@ class Fasih3603App(ctk.CTk):
             fg_color="#4f46e5",
             hover_color="#4338ca",
             command=self._show_cleaning_nik_r27_view
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            btn_box2,
+            text="📦 Buka Modul KBLI PMM",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=40,
+            fg_color="#e11d48",
+            hover_color="#be123c",
+            command=self._show_kbli_pmm_view
         ).pack(side="left")
 
         return frame
@@ -464,6 +489,8 @@ class Fasih3603App(ctk.CTk):
             self.view_cleaning_nik_r30._on_enter_pressed(event)
         elif hasattr(self, "view_cleaning_nik_r27") and self.current_view == self.view_cleaning_nik_r27:
             self.view_cleaning_nik_r27._on_enter_pressed(event)
+        elif hasattr(self, "view_kbli_pmm") and self.current_view == self.view_kbli_pmm:
+            self.view_kbli_pmm._on_enter_pressed(event)
 
     def _launch_chrome_action(self):
         self.lbl_browser_status.configure(text="🟡 Membuka...", text_color="#f59e0b")
@@ -515,6 +542,7 @@ class Fasih3603App(ctk.CTk):
             getattr(self, "view_cleaning_usaha", None),
             getattr(self, "view_remark_kbli", None),
             getattr(self, "view_kbli_sembako", None),
+            getattr(self, "view_kbli_pmm", None),
             getattr(self, "view_cleaning_nik_r30", None),
             getattr(self, "view_cleaning_nik_r27", None)
         ]

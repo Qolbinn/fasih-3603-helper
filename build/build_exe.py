@@ -67,6 +67,7 @@ def build():
         "--hidden-import=modules.kbli_sembako",
         "--hidden-import=modules.cleaning_nik_r30",
         "--hidden-import=modules.cleaning_nik_r27",
+        "--hidden-import=modules.kbli_pmm",
         f"--workpath={str(BUILD_CACHE)}",
         f"--distpath={str(DIST_DIR)}",
         str(ROOT_DIR / "main.py")

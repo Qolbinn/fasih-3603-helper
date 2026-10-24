@@ -5,7 +5,7 @@
 ; Cukup ubah MyAppVersion di bawah saat ada rilis versi baru.
 
 #define MyAppName "FASIH 3603 Helper"
-#define MyAppVersion "1.4.0"
+#define MyAppVersion "1.5.0"
 #define MyAppPublisher "BPS Kabupaten Tangerang"
 #define MyAppURL "https://tangerangkab.bps.go.id"
 #define MyAppExeName "FASIH_3603_Helper.exe"
@@ -55,9 +55,9 @@ Source: "..\dist\FASIH_3603_Helper\*"; DestDir: "{app}"; Flags: ignoreversion re
 
 [Icons]
 ; Shortcut di Menu Start
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\app_icon.ico"
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\app_icon.ico"; AppUserModelID: "bps3603.fasihhelper.desktop"
 ; Shortcut di Desktop
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\app_icon.ico"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\app_icon.ico"; Tasks: desktopicon; AppUserModelID: "bps3603.fasihhelper.desktop"
 
 [Run]
 ; Opsi langsung jalankan aplikasi setelah instalasi selesai
