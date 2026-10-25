@@ -29,68 +29,145 @@ Aplikasi ini didesain ramah pengguna non-teknis:
 ```
 Fasih 3603 Helper/
 │
-├── main.py                     # Entry point utama aplikasi desktop (CustomTkinter)
-├── cli_runner.py               # Standalone runner CLI untuk uji paritas & debugging
-├── config.py                   # Konfigurasi global, path AppData, flags Chrome
+├── desktop_app/                 # Aplikasi Desktop Python (CustomTkinter + Playwright)
+│   ├── main.py                  # Entry point utama aplikasi desktop
+│   ├── cli_runner.py            # Standalone runner CLI untuk uji paritas & debugging
+│   ├── config.py                # Konfigurasi global, path AppData, flags Chrome
+│   ├── core/                    # Shared Services (BrowserManager, Logger, EventBus)
+│   ├── modules/                 # Modul Otomasi Desktop (Cleaning Usaha, KBLI, NIK)
+│   ├── assets/                  # Ikon aplikasi & gambar branding
+│   └── build/                   # Skrip PyInstaller & Inno Setup Compiler
 │
-├── core/                       # Layanan inti bersama (Shared Services)
-│   ├── browser_manager.py     # Deteksi path browser, port CDP 9222, status login SSO
-│   ├── window_controller.py   # Pengendali minimize & restore jendela browser (Win32 API)
-│   ├── audit_logger.py        # Pencatatan jejak audit per baris (CSV)
-│   ├── logger.py              # Central logger (file harian + callback UI)
-│   └── event_bus.py           # Antrian event thread-safe (Worker <-> UI)
-│
-├── modules/                    # Modul-modul otomasi (Hub Architecture)
-│   ├── data_cleaning/         # Modul Utama: Data Cleaning SE2026
-│   │   ├── selectors.py       # Semua CSS/XPath selector terpusat
-│   │   ├── validator.py       # Validasi template & pembuat template Excel
-│   │   ├── engine.py          # Logika Playwright data cleaning
-│   │   └── view.py            # Tampilan CustomTkinter 2-Tab (Statistik & Log)
-│   │
-│   └── approve_se2026/        # Modul: Batch Approval SE 2026 (Segera Hadir)
-│       └── view.py            # Tampilan Pratinjau Fitur Approval
-│
-└── build/                      # Berkas packaging & installer
-    ├── build_exe.py           # Skrip build PyInstaller (--onedir)
-    └── installer.iss          # Skrip Inno Setup Compiler (.exe setup installer)
+└── browser_extension/           # Ekstensi Browser Native (Manifest V3 - Chrome / Edge)
+    ├── manifest.json            # Konfigurasi ekstensi MV3
+    ├── background/              # Service worker (Side Panel & message dispatcher)
+    ├── sidepanel/               # Pusat Komando (UI Side Panel, Orchestrator, Excel IO)
+    ├── content/                 # Content Scripts & DOM Toolkit per tab Fasih
+    ├── libs/                    # Vendor library (SheetJS / xlsx)
+    └── icons/                   # Aset ikon ekstensi
 ```
 
 ---
 
-## 🚀 Cara Menjalankan (Mode Pengembangan)
-
-1. Pastikan environment Python aktif:
-   ```powershell
-   conda activate automation
-   ```
-2. Jalankan aplikasi desktop:
-   ```powershell
-   python main.py
-   ```
-3. Atau jalankan CLI runner (untuk debugging):
-   ```powershell
-   python cli_runner.py --file "path/to/flag_clean.xlsx"
-   ```
+# FASIH 3603 Helper
+*Suite Otomasi Pembersihan Data & KBLI Survei BPS Kabupaten Tangerang*
 
 ---
 
-## 📦 Cara Membangun Executable & Installer
+## 📌 Tentang Aplikasi & Arsitektur
+**FASIH 3603 Helper** adalah suite otomasi resmi yang dirancang khusus untuk mempermudah rekan-rekan kerja di lingkungan **BPS Kabupaten Tangerang (kode wilayah: 3603)** dalam menjalankan verifikasi anomali, pembersihan data (*data cleaning*), penyesuaian KBLI, dan administrasi survei/sensus pada portal Fasih BPS.
 
-1. **Build Folder Executable (PyInstaller)**:
+Untuk fleksibilitas maksimal dan ketahanan terhadap proteksi bot web server, repositori ini kini menyediakan **2 varian eksekusi**:
+
+1. **🌐 Browser Extension (Chrome / Edge Manifest V3 - Direkomendasikan)**:
+   - **Native & Anti-Detection**: Dijalankan langsung di browser harian pengguna tanpa flag remote debugging CDP (`--remote-debugging-port`), sehingga sidik jari browser (*fingerprint*) adalah browser manusia asli non-automasi.
+   - **Pusat Komando Side Panel**: Antarmuka terintegrasi di panel samping browser Chrome/Edge tanpa perlu instalasi Python runtime di komputer pengguna.
+   - **Multi-Tab Worker Paralel**: Mendukung pemrosesan data konkuren (1 hingga 3 tab bersamaan) yang dikomandoi dari satu antrean data Excel.
+   - **Offline-Ready Excel Engine**: Membaca dan memperbarui file Excel secara instan di memori peramban via SheetJS tanpa server eksternal.
+
+2. **🖥️ Desktop App (Python + CustomTkinter + Playwright)**:
+   - Aplikasi desktop mandiri (tersedia skrip build PyInstaller & Windows Installer Inno Setup).
+   - Seluruh modul, selektor, logika retry, dan audit log tersimpan rapi di dalam direktori `desktop_app/`.
+
+---
+
+## 📂 Struktur Repositori
+```
+Fasih 3603 Helper/
+│
+├── browser_extension/            # 🌐 Ekstensi Browser Native (Manifest V3)
+│   ├── manifest.json             # Deklarasi Manifest V3, perizinan & content scripts
+│   ├── background/
+│   │   └── service_worker.js     # Background worker & penanganan Side Panel
+│   ├── sidepanel/                # Pusat Komando Side Panel
+│   │   ├── sidepanel.html        # Layout UI modern (Metrik, Antrean, Log)
+│   │   ├── sidepanel.css         # Styling tema resmi BPS Tangerang
+│   │   ├── sidepanel.js          # Controller UI & drag-and-drop Excel
+│   │   ├── orchestrator.js       # Multi-tab worker pool & state management
+│   │   ├── excel_io.js           # Parser & updater Excel (SheetJS)
+│   │   └── modules_config.js     # Konfigurasi kolom & alias per modul
+│   ├── content/                  # Eksekusi DOM pada Tab Fasih
+│   │   ├── fh_namespace.js       # Global state & logger content script
+│   │   ├── dom_toolkit.js        # Human-like typing, click, modal, switch, remarks
+│   │   ├── session_guard.js      # Detektor sesi login SSO BPS real-time
+│   │   ├── content_main.js       # Dispatcher perintah per tab
+│   │   └── tasks/                # Runner per modul otomasi:
+│   │       ├── remark_kbli.task.js      # Remark KBLI SE2026 (#0 / #4)
+│   │       ├── kbli_sembako.task.js     # KBLI 47111 vs 47211 Minimarket/Kelontong
+│   │       ├── kbli_pmm.task.js         # Penyedia Mamin (56101 vs 56102, 13b/13c)
+│   │       ├── cleaning_usaha.task.js   # Cleaning Pengeluaran, Pendapatan, Aset
+│   │       ├── cleaning_nik_r30.task.js # Verifikasi NIK ART KK (#3)
+│   │       └── cleaning_nik_r27.task.js # Pembersihan NIK ART Menyeluruh (#0)
+│   ├── libs/
+│   │   └── xlsx.full.min.js      # SheetJS library standalone (offline)
+│   ├── icons/                    # Aset ikon resolusi 16, 32, 48, 128 px
+│   └── Pack_Extension.ps1        # Skrip otomatis kemas ekstensi ke file ZIP
+│
+└── desktop_app/                  # 🖥️ Aplikasi Desktop Python (Existing Suite)
+    ├── main.py                   # Entry point aplikasi GUI desktop
+    ├── cli_runner.py             # Runner mode CLI untuk pengujian
+    ├── config.py                 # Konfigurasi browser & AppData
+    ├── core/                     # Shared services (BrowserManager, Logger, EventBus)
+    ├── modules/                  # Logika modul Python (Cleaning, KBLI, NIK)
+    ├── assets/                   # Ikon & logo desktop app
+    ├── build/                    # build_exe.py & installer.iss
+    └── *.bat                     # Batch launcher siap pakai
+```
+
+---
+
+## 🌐 Panduan Memasang Ekstensi Browser
+
+### 1. Pasang di Google Chrome atau Microsoft Edge
+1. Buka browser **Google Chrome** atau **Microsoft Edge**.
+2. Buka menu ekstensi:
+   - Chrome: ketik `chrome://extensions` di address bar, lalu aktifkan toggle **Mode Pengembang (Developer Mode)** di pojok kanan atas.
+   - Edge: ketik `edge://extensions` di address bar, lalu aktifkan toggle **Mode Pengembang**.
+3. Klik tombol **Muat yang belum dibongkar (Load Unpacked)**.
+4. Pilih folder `browser_extension` yang berada di dalam repositori ini.
+5. Ekstensi **FASIH 3603 Helper** akan terpasang seketika.
+
+### 2. Membuka dan Menggunakan Side Panel
+1. Buka situs [https://fasih-sm.bps.go.id](https://fasih-sm.bps.go.id) dan pastikan akun SSO BPS Anda sudah dalam kondisi login aktif.
+2. Klik ikon puzzle ekstensi di toolbar kanan atas browser, lalu pin ikon **FASIH 3603 Helper**.
+3. Klik ikon ekstensi untuk membuka **Side Panel** di sisi kanan peramban.
+4. Pilih **Modul Otomasi** yang ingin dijalankan.
+5. Pilih **Multi-Tab Worker** (1 Tab direkomendasikan, atau 2-3 Tab untuk pemrosesan paralel).
+6. Tentukan **Mode Eksekusi**:
+   - **Produksi**: Formulir langsung dikonfirmasi dan disubmit secara otomatis.
+   - **Review**: Mengisi data dan memunculkan konfirmasi agar dapat diperiksa manual sebelum dikirim.
+7. Unggah file Excel sasaran (tersedia tombol **Unduh Template** resmi jika belum memiliki format baku).
+8. Klik **Mulai Otomasi**. Anda dapat menjeda (*Pause*), melanjutkan (*Resume*), atau menghentikan (*Stop*) kapan saja.
+9. Setelah selesai, klik **Unduh Hasil Excel** untuk mengunduh rekap status baris yang berhasil/gagal.
+
+### 3. Mengemas Ekstensi untuk Distribusi (.zip)
+Untuk membagikan ekstensi kepada staf atau mitra tanpa perlu clone git:
+```powershell
+powershell -ExecutionPolicy Bypass -File "browser_extension\Pack_Extension.ps1"
+```
+File `Fasih_3603_Helper_Extension.zip` siap dibagikan dan dapat langsung diekstrak lalu di-load oleh pengguna lain.
+
+---
+
+## 🖥️ Panduan Aplikasi Desktop (Python)
+
+### 1. Menjalankan di Mode Pengembangan
+```powershell
+cd desktop_app
+conda activate automation
+python main.py
+```
+
+### 2. Membangun Executable & Installer Windows
+1. **PyInstaller**:
    ```powershell
+   cd desktop_app
    python build/build_exe.py
    ```
-   Hasil build akan tersimpan di folder `dist/FASIH_3603_Helper/`.
-
-2. **Build Installer Windows (Inno Setup)**:
-   - Buka aplikasi **Inno Setup Compiler**.
-   - Buka file `build/installer.iss`.
-   - Klik menu **Build -> Compile** (atau tekan `Ctrl + F9`).
-   - File installer siap didistribusikan: `dist_installer/FASIH_3603_Helper_Setup_v1.0.exe`.
+2. **Inno Setup**: Buka `desktop_app/build/installer.iss` menggunakan Inno Setup Compiler dan tekan `Ctrl + F9`.
 
 ---
 
 ## 🔒 Kebijakan & Pengamanan
-- Seluruh data lokal (profil Chrome terpisah, file log, dan jejak audit) tersimpan secara aman di folder:
-  `%LOCALAPPDATA%\FASIH3603Helper\`
-- Pembaruan aplikasi melalui installer baru tidak akan menghapus data konfigurasi atau riwayat kerja pengguna.
+- Seluruh komunikasi data, parsing Excel, dan otomasi berjalan 100% secara lokal pada komputer pengguna tanpa perantara server pihak ketiga.
+- Ekstensi dilengkapi **Session Guard** yang mendeteksi kedaluwarsa sesi SSO BPS dan langsung menjeda otomasi secara aman agar pengguna dapat login kembali tanpa kehilangan antrean data.

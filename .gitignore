@@ -11,7 +11,10 @@ __pycache__/
 *.pyc
 
 # 2. PyInstaller & Build Artifacts (Jangan upload folder dist ke repo git)
-build/
+desktop_app/build/pyinstaller_cache/
+desktop_app/dist/
+desktop_app/dist_installer/
+build/pyinstaller_cache/
 dist/
 dist_installer/
 
@@ -20,6 +23,7 @@ dist_installer/
 *.bak
 *.tmp
 *.temp
+*.zip
 
 # 4. Data Excel & Temp Office Files (Mencegah data mentah/privat ter-upload)
 data/

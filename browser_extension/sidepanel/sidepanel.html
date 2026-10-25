@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FASIH 3603 Helper - Side Panel</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 1. Header & Brand -->
+    <header class="app-header">
+      <div class="brand-row">
+        <img src="../icons/icon_48.png" alt="Logo" class="brand-logo">
+        <div class="brand-text">
+          <div class="brand-title">FASIH 3603 Helper</div>
+          <div class="brand-sub">BPS KABUPATEN TANGERANG</div>
+        </div>
+        <span class="version-tag">v1.0.0</span>
+      </div>
+    </header>
+
+    <!-- 1.5. Status Autentikasi & Akun SSO BPS -->
+    <section class="section-card auth-card">
+      <div class="auth-header-row">
+        <div class="auth-title-col">
+          <span class="auth-icon">🔐</span>
+          <span class="form-label" style="margin-bottom: 0;">Autentikasi SSO BPS:</span>
+        </div>
+        <span id="auth-status-badge" class="badge badge-proses">Memeriksa...</span>
+      </div>
+
+      <div class="options-grid">
+        <div class="form-group">
+          <label for="auth-mode" class="form-label">Mode Login:</label>
+          <select id="auth-mode" class="form-select">
+            <option value="manual">👤 Login Manual di Browser</option>
+            <option value="auto">⚡ Auto-Login SSO (Non-OTP)</option>
+          </select>
+        </div>
+        <div class="form-group" style="display: flex; justify-content: flex-end; align-items: flex-end;">
+          <button id="btn-check-auth" class="btn btn-secondary" style="width: 100%; height: 35px; font-size: 11px;" title="Periksa status sesi login pada tab Fasih">
+            🔄 Cek Sesi
+          </button>
+        </div>
+      </div>
+
+      <!-- Form Kredensial SSO (Ditampilkan jika mode Auto-Login dipilih) -->
+      <div id="auth-credentials-form" style="display: none;">
+        <div class="form-group">
+          <label for="sso-username" class="form-label">Username SSO BPS:</label>
+          <input type="text" id="sso-username" class="form-input" placeholder="contoh: ahmad.junaedi" autocomplete="username">
+        </div>
+        <div class="form-group" style="margin-top: 6px;">
+          <label for="sso-password" class="form-label">Password SSO BPS:</label>
+          <div class="password-wrapper">
+            <input type="password" id="sso-password" class="form-input" placeholder="Password SSO Anda" autocomplete="current-password">
+            <button type="button" id="btn-toggle-password" class="btn-toggle-eye" title="Tampilkan/Sembunyikan Password">👁️</button>
+          </div>
+        </div>
+        <div class="auth-actions-row" style="margin-top: 8px;">
+          <button id="btn-do-login" class="btn btn-primary" style="width: 100%; font-size: 11px;">
+            🔑 Login SSO Sekarang
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Kontrol Konfigurasi & Modul -->
+    <section class="section-card">
+      <div class="form-group">
+        <label for="module-select" class="form-label">🎯 Pilih Modul Otomasi:</label>
+        <select id="module-select" class="form-select">
+          <option value="remark_kbli">🏷️ Remark KBLI SE2026</option>
+          <option value="kbli_sembako">🛒 KBLI Sembako SE2026</option>
+          <option value="kbli_pmm">📦 KBLI PMM SE2026</option>
+          <option value="cleaning_usaha">🧹 Cleaning Usaha SE2026</option>
+          <option value="cleaning_nik_r30">🆔 Cleaning NIK R30 SE2026</option>
+          <option value="cleaning_nik_r27">🆔 Cleaning NIK R27 SE2026</option>
+        </select>
+        <div id="module-desc" class="module-desc"></div>
+      </div>
+
+      <div class="options-grid">
+        <div class="form-group">
+          <label for="worker-count" class="form-label">⚡ Multi-Tab Worker:</label>
+          <select id="worker-count" class="form-select">
+            <option value="1">1 Tab (Rekomendasi / Stabil)</option>
+            <option value="2">2 Tab (Cepat / Paralel)</option>
+            <option value="3">3 Tab (Maksimal)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="exec-mode" class="form-label">⚙️ Mode Eksekusi:</label>
+          <select id="exec-mode" class="form-select">
+            <option value="production">🚀 Produksi (Auto-Submit)</option>
+            <option value="review">🔍 Review (Cek Sebelum Kirim)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Unggah File Excel & Template -->
+    <section class="section-card">
+      <div class="file-header-row">
+        <label class="form-label">📄 File Excel Data Sasaran:</label>
+        <button id="btn-download-template" class="btn-text" title="Unduh format template Excel resmi">
+          📥 Unduh Template
+        </button>
+      </div>
+
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-icon">📊</div>
+        <div id="drop-text" class="drop-text">Klik atau seret file Excel (.xlsx) ke sini</div>
+        <input type="file" id="file-input" accept=".xlsx, .xls" style="display: none;">
+      </div>
+      <div id="file-info" class="file-info" style="display: none;"></div>
+    </section>
+
+    <!-- 4. Tombol Aksi Utama -->
+    <section class="action-bar">
+      <button id="btn-start" class="btn btn-primary" disabled>
+        ▶️ Mulai Otomasi
+      </button>
+      <button id="btn-pause" class="btn btn-warning" style="display: none;">
+        ⏸️ Jeda
+      </button>
+      <button id="btn-resume" class="btn btn-warning" style="display: none;">
+        ▶️ Lanjut
+      </button>
+      <button id="btn-stop" class="btn btn-danger" style="display: none;">
+        ⏹️ Berhenti
+      </button>
+      <button id="btn-download-result" class="btn btn-success" disabled>
+        💾 Unduh Hasil Excel
+      </button>
+    </section>
+
+    <!-- 5. Metrik & Progress Bar -->
+    <section class="section-card">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num" id="stat-total">0</div>
+          <div class="stat-label">Total</div>
+        </div>
+        <div class="stat-card stat-done">
+          <div class="stat-num" id="stat-done">0</div>
+          <div class="stat-label">Selesai</div>
+        </div>
+        <div class="stat-card stat-error">
+          <div class="stat-num" id="stat-error">0</div>
+          <div class="stat-label">Gagal</div>
+        </div>
+        <div class="stat-card stat-pending">
+          <div class="stat-num" id="stat-pending">0</div>
+          <div class="stat-label">Sisa</div>
+        </div>
+      </div>
+
+      <div class="progress-container">
+        <div class="progress-bar-bg">
+          <div id="progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+        </div>
+        <div class="progress-text-row">
+          <span id="progress-pct">0%</span>
+          <span id="progress-status">Menunggu file Excel...</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Tab Tampilan: Antrean Data & Log Terminal -->
+    <section class="section-card tabs-card">
+      <div class="tabs-header">
+        <button id="tab-btn-queue" class="tab-btn active">📋 Antrean Data</button>
+        <button id="tab-btn-logs" class="tab-btn">💻 Log Terminal</button>
+      </div>
+
+      <!-- Tab Content: Tabel Antrean -->
+      <div id="tab-content-queue" class="tab-pane active">
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;">No</th>
+                <th>Assignment ID</th>
+                <th>Info / Uraian</th>
+                <th style="width: 80px;">Status</th>
+                <th>Keterangan</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <tr>
+                <td colspan="5" class="empty-cell">Belum ada file Excel yang dimuat.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Content: Log Terminal -->
+      <div id="tab-content-logs" class="tab-pane">
+        <div class="log-controls">
+          <input type="text" id="log-search" class="log-search-input" placeholder="Cari log...">
+          <button id="btn-copy-logs" class="btn-sm">📋 Salin Log</button>
+          <button id="btn-clear-logs" class="btn-sm">🗑️ Bersihkan</button>
+        </div>
+        <div id="log-box" class="log-box"></div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      Dikembangkan khusus BPS Kabupaten Tangerang &bull; Anti-Detection Native Engine
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../libs/xlsx.full.min.js"></script>
+  <script src="modules_config.js"></script>
+  <script src="excel_io.js"></script>
+  <script src="orchestrator.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
