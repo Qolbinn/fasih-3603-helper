@@ -99,8 +99,8 @@
 
   function getRowValue(row, keys) {
     for (const k of keys) {
-      if (row[k] !== undefined && row[k] !== "") return row[k];
-      if (row._raw && row._raw[k] !== undefined && row._raw[k] !== "") return row._raw[k];
+      if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== "") return row[k];
+      if (row._raw && row._raw[k] !== undefined && row._raw[k] !== null && String(row._raw[k]).trim() !== "") return row._raw[k];
     }
     return null;
   }
@@ -176,22 +176,83 @@
   async function fillComponents(compList, row) {
     for (const comp of compList) {
       const val = getRowValue(row, comp.keys);
-      if (val !== null && !isNaN(Number(val)) && Number(val) > 0) {
-        const targetVal = Math.round(Number(val));
-        let elem = FH.find(comp.selector);
-        if (!elem && comp.fallback) {
-          elem = FH.find(comp.fallback);
-        }
+      // Jika sel komponen kosong / null / undefined -> biarkan saja (skip)
+      if (val === null || val === undefined || String(val).trim() === "") {
+        continue;
+      }
 
-        if (elem && FH.isVisible(elem)) {
-          FH.log("info", `Mengisi ${comp.name}: Rp ${targetVal.toLocaleString("id-ID")}`);
-          await FH.safeFillCurrency(elem, targetVal);
+      const num = Number(val);
+      if (isNaN(num)) continue;
+
+      const targetVal = Math.round(num);
+      let elem = FH.find(comp.selector);
+      if (!elem && comp.fallback) {
+        elem = FH.find(comp.fallback);
+      }
+
+      const isPresent = elem && FH.isVisible(elem);
+
+      if (targetVal === 0) {
+        // Jika isiannya 0: cek dulu komponen penyusun di eform fasih elemennya ada atau ngga
+        // Jika ada -> timpa dengan 0
+        // Jika tidak ada -> biarkan / lewati
+        if (isPresent) {
+          FH.log("info", `Mengisi ${comp.name}: Rp 0 (menimpa dengan 0)`);
+          await FH.safeFillCurrency(elem, 0);
           await FH.randomSleep(0.3, 0.6);
         } else {
-          FH.log("warn", `Field '${comp.name}' tidak ditemukan di form, padahal nilai Excel = ${targetVal.toLocaleString("id-ID")}`);
+          FH.log("info", `Komponen '${comp.name}' bernilai 0 di Excel dan tidak ditemukan di form Fasih -> Dilewati.`);
         }
+      } else if (targetVal > 0) {
+        if (!isPresent) {
+          throw new Error(`Field '${comp.name}' tidak ditemukan di form Fasih, padahal nilai Excel = Rp ${targetVal.toLocaleString("id-ID")}.`);
+        }
+        FH.log("info", `Mengisi ${comp.name}: Rp ${targetVal.toLocaleString("id-ID")}`);
+        await FH.safeFillCurrency(elem, targetVal);
+        await FH.randomSleep(0.3, 0.6);
       }
     }
+  }
+
+  function readContainerCurrencyValue(selectorOrEl) {
+    try {
+      const el = typeof selectorOrEl === "string" ? FH.find(selectorOrEl) : selectorOrEl;
+      if (!el) return null;
+      const inp = el.querySelector("input[type='text'], input");
+      if (inp && inp.value && String(inp.value).trim() !== "") {
+        return FH.parseFasihCurrency(inp.value);
+      }
+      const txt = el.textContent || "";
+      return FH.parseFasihCurrency(txt);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function verifyEformTotal(selectorOrEl, targetClean, fieldName, maxWaitSec = 3.5) {
+    const targetNum = targetClean !== null && targetClean !== undefined && String(targetClean).trim() !== ""
+      ? Math.round(Number(targetClean) || 0)
+      : 0;
+
+    const startTime = Date.now();
+    let lastVal = null;
+
+    while ((Date.now() - startTime) < maxWaitSec * 1000) {
+      lastVal = readContainerCurrencyValue(selectorOrEl);
+      if (lastVal !== null && lastVal === targetNum) {
+        FH.log("info", `Verifikasi ${fieldName} COCOK: eform Rp ${lastVal.toLocaleString("id-ID")} == Excel Rp ${targetNum.toLocaleString("id-ID")}`);
+        return true;
+      }
+      await FH.sleep(300);
+    }
+
+    if (lastVal !== null && lastVal !== targetNum) {
+      const diff = Math.abs(lastVal - targetNum);
+      const errMsg = `Validasi ${fieldName} TIDAK COCOK setelah pengisian komponen! Total di eform Fasih = Rp ${lastVal.toLocaleString("id-ID")}, sedangkan target di Excel (Clean) = Rp ${targetNum.toLocaleString("id-ID")} (Selisih: Rp ${diff.toLocaleString("id-ID")}). Submit dibatalkan agar data tidak inkonsisten.`;
+      FH.log("error", errMsg);
+      throw new Error(errMsg);
+    }
+    return true;
   }
 
   // STEP 6-8: Submit Flow Berantai (Blok Catatan -> Switch Anomali -> Kirim -> Cek Galat -> Konfirmasi -> Sukses)
@@ -290,6 +351,8 @@
     if (diffPengeluaran) {
       FH.log("info", `Total Pengeluaran BERBEDA (Clean: ${tpClean} vs RAW: ${tpRaw}) -> Mengisi komponen...`);
       await fillComponents(PENGELUARAN_MAP, row);
+      await FH.randomSleep(0.5, 0.8);
+      await verifyEformTotal(SELECTORS.total_pengeluaran, tpClean, "Total Pengeluaran");
       remarksPengeluaran = "#4";
     } else {
       FH.log("info", `Total Pengeluaran SAMA (Clean: ${tpClean} vs RAW: ${tpRaw}) -> Lewati komponen.`);
@@ -309,6 +372,8 @@
     if (diffPendapatan) {
       FH.log("info", `Total Pendapatan BERBEDA (Clean: ${tpendClean} vs RAW: ${tpendRaw}) -> Mengisi komponen...`);
       await fillComponents(PENDAPATAN_MAP, row);
+      await FH.randomSleep(0.5, 0.8);
+      await verifyEformTotal(SELECTORS.total_pendapatan, tpendClean, "Total Pendapatan");
       remarksPendapatan = "#4";
     } else {
       FH.log("info", `Total Pendapatan SAMA (Clean: ${tpendClean} vs RAW: ${tpendRaw}) -> Lewati komponen.`);
@@ -333,20 +398,40 @@
       const elemSelainTanah = FH.find(ASET_MAP.selain_tanah.selector) || FH.find(ASET_MAP.selain_tanah.fallback);
 
       let valExistTanah = 0;
+      let valExistLain = 0;
       if (elemTanah) {
         const inp = elemTanah.querySelector("input");
         if (inp) valExistTanah = FH.parseFasihCurrency(inp.value);
       }
-
       if (elemSelainTanah) {
-        const targetNonTanah = Math.max(0, totAsetNum - valExistTanah);
-        FH.log("info", `Mengisi Aset Selain Tanah: Rp ${targetNonTanah.toLocaleString("id-ID")}`);
-        await FH.safeFillCurrency(elemSelainTanah, targetNonTanah);
-      } else if (elemTanah) {
-        FH.log("info", `Mengisi Aset Tanah: Rp ${totAsetNum.toLocaleString("id-ID")}`);
-        await FH.safeFillCurrency(elemTanah, totAsetNum);
+        const inp = elemSelainTanah.querySelector("input");
+        if (inp) valExistLain = FH.parseFasihCurrency(inp.value);
       }
 
+      const totalExist = valExistTanah + valExistLain;
+      let asetTanahBaru = 0;
+      let asetNonTanahBaru = 0;
+      if (totalExist > 0) {
+        const propTanah = valExistTanah / totalExist;
+        asetTanahBaru = Math.round(totAsetNum * propTanah);
+        asetNonTanahBaru = totAsetNum - asetTanahBaru;
+      } else {
+        const pctTanah = 65; // ~60-70% default tanah
+        asetTanahBaru = Math.round(totAsetNum * (pctTanah / 100.0));
+        asetNonTanahBaru = totAsetNum - asetTanahBaru;
+      }
+
+      if (elemTanah && FH.isVisible(elemTanah)) {
+        await FH.safeFillCurrency(elemTanah, asetTanahBaru);
+        await FH.randomSleep(0.3, 0.6);
+      }
+      if (elemSelainTanah && FH.isVisible(elemSelainTanah)) {
+        await FH.safeFillCurrency(elemSelainTanah, asetNonTanahBaru);
+        await FH.randomSleep(0.3, 0.6);
+      }
+
+      await FH.randomSleep(0.5, 0.8);
+      await verifyEformTotal(SELECTORS.total_aset, taClean, "Total Aset");
       remarksAset = "#4";
     } else {
       FH.log("info", `Total Aset SAMA (Clean: ${taClean} vs RAW: ${taRaw}) -> Lewati perhitungan aset.`);

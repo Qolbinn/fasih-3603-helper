@@ -236,11 +236,30 @@ def to_int_or_zero(val):
     except (ValueError, TypeError):
         return 0
 
+def parse_numeric_cell(val):
+    """Mengembalikan float jika numerik valid. Mengembalikan None jika kosong, None, atau non-numerik."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if s == "":
+        return None
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
 def fill_components_from_excel(page, comp_list, sheet, row_idx, col_map, event_bus=None, worker_prefix="", excel_lock=None):
     """
-    Dipakai saat total BERBEDA (remarks #4): Mengisi komponen penyusun HANYA jika kolomnya ada di Excel
-    dan memiliki nilai valid > 0 (sesuai data_cleaning.py & alur.md).
-    Jika kolom tidak ada di Excel atau bernilai kosong/0, komponen TIDAK ditimpa dengan 0.
+    Dipakai saat total BERBEDA (remarks #4):
+    - Jika kolom komponen tidak ada di Excel atau bernilai kosong/null: biarkan saja (skip).
+    - Jika bernilai 0:
+        * Cek apakah elemen komponen ada dan visible di eform Fasih.
+        * Jika ada: timpa dengan 0 (agar kalkulasi total di Fasih sinkron dengan Excel).
+        * Jika tidak ada: biarkan / lewati (tidak melempar exception).
+    - Jika bernilai > 0:
+        * Cek apakah elemen komponen ada dan visible di eform Fasih.
+        * Jika ada: isi dengan nilai target.
+        * Jika tidak ada: lempar exception (karena nilai > 0 wajib terisi).
     """
     for comp in comp_list:
         c_idx = col_map.get(comp["excel_key"])
@@ -253,29 +272,36 @@ def fill_components_from_excel(page, comp_list, sheet, row_idx, col_map, event_b
         else:
             raw_val = sheet.cell(row=row_idx, column=c_idx).value
 
-        if not is_valid_positive_number(raw_val):
+        num_val = parse_numeric_cell(raw_val)
+        if num_val is None:
+            # Kosong / null -> biarkan saja
             continue
 
-        target = int(round(float(raw_val)))
+        target = int(round(num_val))
         loc = page.locator(comp["selector"]).first
         if loc.count() == 0 and "fallback" in comp:
             loc = page.locator(comp["fallback"]).first
 
-        if loc.count() == 0 or not loc.is_visible():
-            raise Exception(f"Field '{comp['name']}' tidak ditemukan di form Fasih, padahal nilai Excel = {target:,}.")
+        is_present = False
+        try:
+            is_present = loc.count() > 0 and loc.is_visible()
+        except Exception:
+            is_present = False
 
-        logger.info(f"{worker_prefix}Mengisi {comp['name']}: {target:,}")
-        safe_fill_currency(page, loc, target, event_bus=event_bus)
-        random_sleep(0.3, 0.6, event_bus=event_bus, allow_hesitation=False)
+        if target == 0:
+            if is_present:
+                logger.info(f"{worker_prefix}Mengisi {comp['name']}: 0 (menimpa dengan 0)")
+                safe_fill_currency(page, loc, 0, event_bus=event_bus)
+                random_sleep(0.3, 0.6, event_bus=event_bus, allow_hesitation=False)
+            else:
+                logger.debug(f"{worker_prefix}Komponen '{comp['name']}' bernilai 0 di Excel dan elemen tidak ditemukan di form Fasih -> Dilewati.")
+        elif target > 0:
+            if not is_present:
+                raise Exception(f"Field '{comp['name']}' tidak ditemukan di form Fasih, padahal nilai Excel = {target:,}.")
 
-def is_valid_positive_number(val):
-    if val is None:
-        return False
-    try:
-        num = float(val)
-        return num > 0
-    except (ValueError, TypeError):
-        return False
+            logger.info(f"{worker_prefix}Mengisi {comp['name']}: {target:,}")
+            safe_fill_currency(page, loc, target, event_bus=event_bus)
+            random_sleep(0.3, 0.6, event_bus=event_bus, allow_hesitation=False)
 
 def is_values_different(val_clean, val_raw):
     clean_empty = val_clean is None or str(val_clean).strip() == ""
@@ -296,6 +322,51 @@ def parse_fasih_currency(val_str):
         return 0
     cleaned = re.sub(r"[^\d]", "", str(val_str))
     return int(cleaned) if cleaned else 0
+
+def read_container_currency_value(page, selector_or_locator):
+    """Membaca nilai nominal mata uang dari elemen container Fasih (melalui input value atau inner_text)."""
+    try:
+        if isinstance(selector_or_locator, str):
+            loc = page.locator(selector_or_locator).first
+        else:
+            loc = selector_or_locator
+        if loc.count() == 0:
+            return None
+        inp = loc.locator("input[type='text'], input").first
+        if inp.count() > 0:
+            val = inp.input_value()
+            if val is not None and str(val).strip() != "":
+                return parse_fasih_currency(val)
+        txt = loc.inner_text()
+        return parse_fasih_currency(txt)
+    except Exception:
+        return None
+
+def verify_eform_total(page, selector, target_clean, field_name, worker_prefix="", max_wait_sec=3.5):
+    """
+    Menunggu dan memverifikasi apakah total di eform Fasih sesuai dengan target_clean dari Excel.
+    Jika tidak cocok setelah timeout, melempar Exception sehingga submit dibatalkan.
+    """
+    target_num = int(round(float(target_clean))) if target_clean is not None and str(target_clean).strip() != "" else 0
+    start = time.time()
+    last_val = None
+    while time.time() - start < max_wait_sec:
+        last_val = read_container_currency_value(page, selector)
+        if last_val is not None and last_val == target_num:
+            logger.bot(f"{worker_prefix}Verifikasi {field_name} COCOK: eform Rp {last_val:,} == Excel Rp {target_num:,}")
+            return True
+        time.sleep(0.3)
+
+    if last_val is not None and last_val != target_num:
+        diff = abs(last_val - target_num)
+        err_msg = (
+            f"Validasi {field_name} TIDAK COCOK setelah pengisian komponen! "
+            f"Total di eform Fasih = Rp {last_val:,}, sedangkan target di Excel (Clean) = Rp {target_num:,} "
+            f"(Selisih: Rp {diff:,}). Submit dibatalkan agar data tidak inkonsisten."
+        )
+        logger.error(f"{worker_prefix}{err_msg}")
+        raise Exception(err_msg)
+    return True
 
 # ==============================================================================
 # ENGINE OTOMASI DATA CLEANING (WORKER RUNNER)
@@ -690,6 +761,8 @@ class DataCleaningEngine:
                     if diff_pengeluaran:
                         logger.bot(f"{w_tag}Total Pengeluaran BERBEDA (Clean: {tp_val} vs RAW: {tp_raw_val}) -> Mengisi komponen...")
                         fill_components_from_excel(page, PENGELUARAN_MAP, sheet, row_idx, col_map, event_bus=self.event_bus, worker_prefix=w_tag, excel_lock=self.excel_lock)
+                        random_sleep(0.5, 0.8, event_bus=self.event_bus, allow_hesitation=False)
+                        verify_eform_total(page, TOTAL_PENGELUARAN_SELECTOR, tp_val, "Total Pengeluaran", worker_prefix=w_tag)
                         remarks_pengeluaran = "#4"
                     else:
                         logger.bot(f"{w_tag}Total Pengeluaran SAMA (Clean: {tp_val} vs RAW: {tp_raw_val}) -> Lewati komponen.")
@@ -710,6 +783,8 @@ class DataCleaningEngine:
                     if diff_pendapatan:
                         logger.bot(f"{w_tag}Total Pendapatan BERBEDA (Clean: {tpend_val} vs RAW: {tpend_raw_val}) -> Mengisi komponen...")
                         fill_components_from_excel(page, PENDAPATAN_MAP, sheet, row_idx, col_map, event_bus=self.event_bus, worker_prefix=w_tag, excel_lock=self.excel_lock)
+                        random_sleep(0.5, 0.8, event_bus=self.event_bus, allow_hesitation=False)
+                        verify_eform_total(page, TOTAL_PENDAPATAN_SELECTOR, tpend_val, "Total Pendapatan", worker_prefix=w_tag)
                         remarks_pendapatan = "#4"
                     else:
                         logger.bot(f"{w_tag}Total Pendapatan SAMA (Clean: {tpend_val} vs RAW: {tpend_raw_val}) -> Lewati komponen.")
@@ -773,6 +848,8 @@ class DataCleaningEngine:
                             safe_fill_currency(page, elem_non_tanah, aset_non_tanah_baru, event_bus=self.event_bus)
                             random_sleep(0.3, 0.6, event_bus=self.event_bus, allow_hesitation=False)
 
+                        random_sleep(0.5, 0.8, event_bus=self.event_bus, allow_hesitation=False)
+                        verify_eform_total(page, ASET_MAP["total_aset"]["selector"], ta_val, "Total Aset", worker_prefix=w_tag)
                         remarks_aset = "#4"
                     else:
                         logger.bot(f"{w_tag}Total Aset SAMA (Clean: {ta_val} vs RAW: {ta_raw_val}) -> Lewati pengisian aset.")
