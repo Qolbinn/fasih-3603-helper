@@ -6,10 +6,13 @@ from tkinter import messagebox
 from pathlib import Path
 import customtkinter as ctk
 
+import config
 from config import (
     APP_NAME, APP_VERSION, APP_SUBTITLE, APP_AUTHOR,
     USER_APPDATA_DIR, LOGS_DIR, AUDIT_DIR,
-    APP_ICON_ICO, APP_LOGO_PNG, APP_LOGO_36, APP_LOGO_64
+    CHROME_PROFILE_DIR, EDGE_PROFILE_DIR,
+    APP_ICON_ICO, APP_LOGO_PNG, APP_LOGO_36, APP_LOGO_64,
+    ENABLE_INCOGNITO_MODE
 )
 from core.logger import logger
 from core.event_bus import EventBus
@@ -119,28 +122,70 @@ class Fasih3603App(ctk.CTk):
         lbl_ver = ctk.CTkLabel(title_box, text=f"v{APP_VERSION}", font=ctk.CTkFont(size=11), text_color="#c084fc", fg_color="#0f172a", corner_radius=6, padx=6, pady=2)
         lbl_ver.pack(side="left")
 
-        # Chrome CDP Launcher Control (Kanan Atas)
-        chrome_box = ctk.CTkFrame(self.top_bar, fg_color="transparent")
-        chrome_box.pack(side="right", padx=16, pady=8)
+        # Browser CDP Launcher Control (Kanan Atas)
+        browser_box = ctk.CTkFrame(self.top_bar, fg_color="transparent")
+        browser_box.pack(side="right", padx=16, pady=8)
+
+        # Segmented Button: Chrome vs Edge
+        current_b = BrowserManager.get_active_browser().capitalize()
+        self.seg_browser = ctk.CTkSegmentedButton(
+            browser_box,
+            values=["Chrome", "Edge"],
+            command=self._on_browser_changed,
+            width=130,
+            height=28,
+            font=ctk.CTkFont(size=11, weight="bold")
+        )
+        self.seg_browser.set(current_b)
+        self.seg_browser.pack(side="left", padx=(0, 8))
+
+        # Checkbox Incognito (Hanya dimunculkan jika ENABLE_INCOGNITO_MODE diaktifkan)
+        if getattr(config, "ENABLE_INCOGNITO_MODE", False):
+            self.incognito_var = tk.BooleanVar(value=BrowserManager.is_incognito_active())
+            self.chk_incognito = ctk.CTkCheckBox(
+                browser_box,
+                text="Incognito",
+                variable=self.incognito_var,
+                command=self._on_incognito_toggle,
+                font=ctk.CTkFont(size=11),
+                width=18,
+                checkbox_width=18,
+                checkbox_height=18
+            )
+            self.chk_incognito.pack(side="left", padx=(0, 8))
+
+        # Tombol Reset Cache Profil
+        self.btn_clear_cache = ctk.CTkButton(
+            browser_box,
+            text="🧹 Reset",
+            font=ctk.CTkFont(size=11),
+            fg_color="#334155",
+            hover_color="#475569",
+            width=65,
+            height=28,
+            command=self._clear_cache_action
+        )
+        self.btn_clear_cache.pack(side="left", padx=(0, 8))
 
         self.lbl_browser_status = ctk.CTkLabel(
-            chrome_box,
-            text="🔴 Chrome Belum Aktif",
+            browser_box,
+            text=f"🔴 {current_b} Belum Aktif",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#f87171"
         )
-        self.lbl_browser_status.pack(side="left", padx=(0, 12))
+        self.lbl_browser_status.pack(side="left", padx=(0, 10))
 
-        self.btn_launch_chrome = ctk.CTkButton(
-            chrome_box,
-            text="🚀 Buka Browser Fasih",
+        self.btn_launch_browser = ctk.CTkButton(
+            browser_box,
+            text="🚀 Buka Browser",
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color="#7c3aed",
             hover_color="#6d28d9",
-            width=150,
-            command=self._launch_chrome_action
+            width=135,
+            height=28,
+            command=self._launch_browser_action
         )
-        self.btn_launch_chrome.pack(side="left")
+        self.btn_launch_browser.pack(side="left")
 
         # Zoom Controls (Di sebelah kiri Chrome Launcher)
         zoom_box = ctk.CTkFrame(self.top_bar, fg_color="transparent")
@@ -449,6 +494,8 @@ class Fasih3603App(ctk.CTk):
 
         dirs = [
             ("Folder Data Pengguna", USER_APPDATA_DIR),
+            ("Profil Google Chrome", CHROME_PROFILE_DIR),
+            ("Profil Microsoft Edge", EDGE_PROFILE_DIR),
             ("Folder Berkas Log", LOGS_DIR),
             ("Folder Jejak Audit", AUDIT_DIR)
         ]
@@ -508,13 +555,38 @@ class Fasih3603App(ctk.CTk):
         elif hasattr(self, "view_kbli_pmm") and self.current_view == self.view_kbli_pmm:
             self.view_kbli_pmm._on_enter_pressed(event)
 
-    def _launch_chrome_action(self):
-        self.lbl_browser_status.configure(text="🟡 Membuka...", text_color="#f59e0b")
+    def _on_browser_changed(self, choice):
+        b = str(choice).lower().strip()
+        BrowserManager.set_active_browser(b)
+        self.lbl_browser_status.configure(text=f"🔴 {choice} Belum Aktif", text_color="#f87171")
+
+    def _on_incognito_toggle(self):
+        if hasattr(self, "incognito_var"):
+            val = self.incognito_var.get()
+            BrowserManager.set_incognito(val)
+
+    def _clear_cache_action(self):
+        b = BrowserManager.get_active_browser().upper()
+        if messagebox.askyesno(
+            "Konfirmasi Reset Cache & Profil",
+            f"Apakah Anda yakin ingin membersihkan data profil & cache browser {b}?\n\n"
+            f"ℹ️ Seluruh cookie penalti bot dan cache usang akan dihapus bersih (Anda perlu login SSO kembali).",
+            icon="warning"
+        ):
+            ok, msg = BrowserManager.clear_browser_cache()
+            if ok:
+                messagebox.showinfo("Reset Berhasil", msg)
+            else:
+                messagebox.showwarning("Perhatian", msg)
+
+    def _launch_browser_action(self):
+        b = BrowserManager.get_active_browser().upper()
+        self.lbl_browser_status.configure(text=f"🟡 Membuka {b}...", text_color="#f59e0b")
         self.update_idletasks()
         success, msg = BrowserManager.launch_browser()
         if not success:
             messagebox.showerror("Peluncuran Browser Gagal", msg)
-            self.lbl_browser_status.configure(text="🔴 Chrome Belum Aktif", text_color="#f87171")
+            self.lbl_browser_status.configure(text=f"🔴 {b} Belum Aktif", text_color="#f87171")
         else:
             self.lbl_browser_status.configure(text="🟢 Browser Aktif", text_color="#34d399")
 
@@ -534,14 +606,17 @@ class Fasih3603App(ctk.CTk):
                 except Exception:
                     break
 
-                active, name = BrowserManager.is_cdp_running(timeout=1.0)
+                b_type = BrowserManager.get_active_browser()
+                port = BrowserManager.get_cdp_port(b_type)
+                active, name = BrowserManager.is_cdp_running(browser_type=b_type, port=port, timeout=1.0)
                 try:
                     if not self.winfo_exists():
                         break
                     if active:
                         self.after(0, lambda n=name: self._safe_update_browser_status(f"🟢 Terhubung ({n})", "#34d399"))
                     else:
-                        self.after(0, lambda: self._safe_update_browser_status("🔴 Chrome Belum Aktif", "#f87171"))
+                        b_cap = b_type.capitalize()
+                        self.after(0, lambda b=b_cap: self._safe_update_browser_status(f"🔴 {b} Belum Aktif", "#f87171"))
                 except Exception:
                     break
 

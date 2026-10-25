@@ -398,6 +398,11 @@ class DataCleaningEngine:
         except (ValueError, TypeError):
             self.num_workers = 2
 
+        # Browser & CDP options
+        self.browser_type = self.config_options.get("browser_type") or BrowserManager.get_active_browser()
+        self.incognito = self.config_options.get("incognito") if self.config_options.get("incognito") is not None else BrowserManager.is_incognito_active()
+        self.cdp_url = self.config_options.get("cdp_url") or BrowserManager.get_cdp_url(self.browser_type)
+
         # Jika mode debug review aktif, batasi worker ke 1 agar interaksi review pengguna tidak bentrok
         if self.debug_review_submit and self.num_workers > 1:
             logger.warning("⚠️ Mode Review Debugging aktif: Jumlah worker disetel ke 1 agar review dapat dilakukan teratur.")
@@ -848,8 +853,6 @@ class DataCleaningEngine:
                             safe_fill_currency(page, elem_non_tanah, aset_non_tanah_baru, event_bus=self.event_bus)
                             random_sleep(0.3, 0.6, event_bus=self.event_bus, allow_hesitation=False)
 
-                        random_sleep(0.5, 0.8, event_bus=self.event_bus, allow_hesitation=False)
-                        verify_eform_total(page, ASET_MAP["total_aset"]["selector"], ta_val, "Total Aset", worker_prefix=w_tag)
                         remarks_aset = "#4"
                     else:
                         logger.bot(f"{w_tag}Total Aset SAMA (Clean: {ta_val} vs RAW: {ta_raw_val}) -> Lewati pengisian aset.")
@@ -1174,11 +1177,13 @@ class DataCleaningEngine:
             })
             return
 
-        # 2. Hubungkan ke Chrome CDP (atau luncurkan otomatis jika belum aktif)
-        is_running, b_name = BrowserManager.is_cdp_running()
+        # 2. Hubungkan ke Browser CDP (atau luncurkan otomatis jika belum aktif)
+        cdp_port = BrowserManager.get_cdp_port(self.browser_type)
+        b_label = "Microsoft Edge" if self.browser_type == "edge" else "Google Chrome"
+        is_running, b_name = BrowserManager.is_cdp_running(browser_type=self.browser_type, port=cdp_port)
         if not is_running:
-            logger.info("Browser belum aktif di port 9222. Meluncurkan Google Chrome secara otomatis...")
-            launched, launch_msg = BrowserManager.launch_browser()
+            logger.info(f"Browser ({b_label}) belum aktif di port {cdp_port}. Meluncurkan {b_label} secara otomatis...")
+            launched, launch_msg = BrowserManager.launch_browser(browser_type=self.browser_type, incognito=self.incognito)
             if not launched:
                 logger.error(f"Gagal meluncurkan browser: {launch_msg}")
                 self.event_bus.set_state(EngineState.IDLE)
@@ -1193,7 +1198,7 @@ class DataCleaningEngine:
         logger.info("Memeriksa status otentikasi SSO Fasih awal...")
         try:
             with sync_playwright() as p_probe:
-                browser_probe = p_probe.chromium.connect_over_cdp(CDP_URL)
+                browser_probe = p_probe.chromium.connect_over_cdp(self.cdp_url)
                 context_probe = browser_probe.contexts[0]
                 page_probe = BrowserManager.find_authenticated_page(context_probe)
                 if not page_probe:
@@ -1281,7 +1286,7 @@ class DataCleaningEngine:
             w_tag = f"[W-{w_id}] "
             try:
                 with sync_playwright() as p_worker:
-                    browser = p_worker.chromium.connect_over_cdp(CDP_URL)
+                    browser = p_worker.chromium.connect_over_cdp(self.cdp_url)
                     context = browser.contexts[0]
 
                     file_label = Path(self.excel_path).stem[:10] if self.excel_path else "Fasih"

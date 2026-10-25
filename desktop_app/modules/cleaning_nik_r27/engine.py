@@ -379,6 +379,11 @@ class CleaningNIKR27Engine:
         except (ValueError, TypeError):
             self.num_workers = 2
 
+        # Browser & CDP options
+        self.browser_type = self.config_options.get("browser_type") or BrowserManager.get_active_browser()
+        self.incognito = self.config_options.get("incognito") if self.config_options.get("incognito") is not None else BrowserManager.is_incognito_active()
+        self.cdp_url = self.config_options.get("cdp_url") or BrowserManager.get_cdp_url(self.browser_type)
+
         if self.debug_review_submit and self.num_workers > 1:
             logger.warning("⚠️ Mode Review Debugging aktif: Jumlah worker disetel ke 1 agar review dapat dilakukan teratur.")
             self.num_workers = 1
@@ -534,9 +539,11 @@ class CleaningNIKR27Engine:
         try:
             with sync_playwright() as p_worker:
                 try:
-                    browser = p_worker.chromium.connect_over_cdp(CDP_URL)
+                    browser = p_worker.chromium.connect_over_cdp(self.cdp_url)
                 except Exception as e:
-                    logger.error(f"❌ {worker_tag}Gagal menghubungkan ke browser Chrome (CDP Port 9222): {e}")
+                    cdp_port = BrowserManager.get_cdp_port(self.browser_type)
+                    b_label = "Microsoft Edge" if self.browser_type == "edge" else "Google Chrome"
+                    logger.error(f"❌ {worker_tag}Gagal menghubungkan ke browser {b_label} (CDP Port {cdp_port}): {e}")
                     return
 
                 context = browser.contexts[0] if browser.contexts else browser.new_context()
@@ -923,20 +930,22 @@ class CleaningNIKR27Engine:
         total_targets = len(target_rows)
         logger.info(f"📋 Total {total_targets} baris antrean target akan diproses.")
 
-        # 2. Hubungkan ke Chrome CDP
-        # Pastikan browser Chrome sudah aktif di port debugging; jika belum, otomatis luncurkan
-        cdp_active, _ = BrowserManager.is_cdp_running()
+        # 2. Hubungkan ke Browser CDP
+        # Pastikan browser sudah aktif di port debugging; jika belum, otomatis luncurkan
+        cdp_port = BrowserManager.get_cdp_port(self.browser_type)
+        b_label = "Microsoft Edge" if self.browser_type == "edge" else "Google Chrome"
+        cdp_active, _ = BrowserManager.is_cdp_running(browser_type=self.browser_type, port=cdp_port)
         if not cdp_active:
-            logger.info("Browser Chrome belum aktif di port 9222. Meluncurkan Chrome otomatis...")
-            launch_ok, launch_msg = BrowserManager.ensure_browser_ready()
+            logger.info(f"Browser {b_label} belum aktif di port {cdp_port}. Meluncurkan {b_label} otomatis...")
+            launch_ok, launch_msg = BrowserManager.ensure_browser_ready(browser_type=self.browser_type, incognito=self.incognito)
             if not launch_ok:
                 err_msg = (
-                    "Gagal terhubung ke Chrome (Port 9222 belum aktif).\n"
-                    "Penyebab: Chrome belum dijalankan dalam mode remote debugging port 9222.\n\n"
+                    f"Gagal terhubung ke {b_label} (Port {cdp_port} belum aktif).\n"
+                    f"Penyebab: {b_label} belum dijalankan dalam mode remote debugging port {cdp_port}.\n\n"
                     "Solusi Praktis:\n"
-                    "1. Tutup seluruh jendela Google Chrome yang sedang terbuka.\n"
-                    "2. Klik tombol '🚀 Luncurkan Chrome' di bagian atas aplikasi ini.\n"
-                    "3. Pastikan indikator berubah menjadi '🟢 Terhubung (Chrome)'.\n"
+                    f"1. Tutup seluruh jendela {b_label} yang sedang terbuka.\n"
+                    "2. Klik tombol '🚀 Buka Browser' di bagian atas aplikasi ini.\n"
+                    f"3. Pastikan indikator berubah menjadi '🟢 Terhubung ({self.browser_type.capitalize()})'.\n"
                     "4. Klik '▶️ Mulai Otomasi' kembali."
                 )
                 logger.error(err_msg)
@@ -953,7 +962,7 @@ class CleaningNIKR27Engine:
         logger.info("Memeriksa status otentikasi SSO Fasih awal...")
         try:
             with sync_playwright() as p_probe:
-                browser_probe = p_probe.chromium.connect_over_cdp(CDP_URL)
+                browser_probe = p_probe.chromium.connect_over_cdp(self.cdp_url)
                 context_probe = browser_probe.contexts[0] if browser_probe.contexts else browser_probe.new_context()
                 page_probe = BrowserManager.find_authenticated_page(context_probe)
                 if not page_probe:

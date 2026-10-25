@@ -10,6 +10,7 @@ import customtkinter as ctk
 from config import LOGS_DIR
 from core.logger import logger
 from core.event_bus import EventBus, EngineState
+from core.browser_manager import BrowserManager
 from modules.remark_kbli.validator import ExcelKBLIValidator
 from modules.remark_kbli.engine import RemarkKBLIEngine
 
@@ -818,7 +819,10 @@ class RemarkKBLIView(ctk.CTkFrame):
             "num_workers": num_workers,
             "auth_mode": auth_mode,
             "sso_username": sso_username,
-            "sso_password": sso_password
+            "sso_password": sso_password,
+            "browser_type": BrowserManager.get_active_browser(),
+            "incognito": BrowserManager.is_incognito_active(),
+            "cdp_url": BrowserManager.get_cdp_url()
         }
 
         self.event_bus.reset_controls()

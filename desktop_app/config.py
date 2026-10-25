@@ -36,28 +36,46 @@ APP_LOGO_PNG = ASSETS_DIR / "app_logo.png"
 APP_LOGO_36 = ASSETS_DIR / "logo_36.png"
 APP_LOGO_64 = ASSETS_DIR / "logo_64.png"
 
+# Browser Profile & Settings Directories
+BROWSER_CHROME = "chrome"
+BROWSER_EDGE = "edge"
+DEFAULT_BROWSER = BROWSER_CHROME
+
+# Feature Flags
+ENABLE_INCOGNITO_MODE = False  # Dinonaktifkan sementara sesuai kebutuhan pengguna
+
+EDGE_PROFILE_DIR = USER_APPDATA_DIR / "edge_profile"
+SETTINGS_FILE = USER_APPDATA_DIR / "settings.json"
+
 # Pastikan folder data pengguna dibuat
-for d in [USER_APPDATA_DIR, CHROME_PROFILE_DIR, LOGS_DIR, AUDIT_DIR, BACKUP_DIR]:
+for d in [USER_APPDATA_DIR, CHROME_PROFILE_DIR, EDGE_PROFILE_DIR, LOGS_DIR, AUDIT_DIR, BACKUP_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-# Default Settings
-DEFAULT_CDP_PORT = 9222
+# Port & URL Remote Debugging CDP
 DEFAULT_CDP_HOST = "127.0.0.1"
+CHROME_CDP_PORT = 9222
+EDGE_CDP_PORT = 9223
+DEFAULT_CDP_PORT = CHROME_CDP_PORT
 CDP_URL = f"http://{DEFAULT_CDP_HOST}:{DEFAULT_CDP_PORT}"
 
-# Browser Launcher Configuration
-CHROME_CANDIDATE_PATHS = [
+# Browser Launcher Paths
+CHROME_PATHS = [
     Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")) / "Google\\Chrome\\Application\\chrome.exe",
     Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")) / "Google\\Chrome\\Application\\chrome.exe",
     Path(os.environ.get("LOCALAPPDATA", "")) / "Google\\Chrome\\Application\\chrome.exe",
-    # Edge Fallback
-    Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")) / "Microsoft\\Edge\\Application\\msedge.exe",
-    Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")) / "Microsoft\\Edge\\Application\\msedge.exe",
 ]
 
-CHROME_FLAGS = [
-    f"--remote-debugging-port={DEFAULT_CDP_PORT}",
-    f"--user-data-dir={str(CHROME_PROFILE_DIR)}",
+EDGE_PATHS = [
+    Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")) / "Microsoft\\Edge\\Application\\msedge.exe",
+    Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")) / "Microsoft\\Edge\\Application\\msedge.exe",
+    Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft\\Edge\\Application\\msedge.exe",
+]
+
+# Backward compatibility alias
+CHROME_CANDIDATE_PATHS = CHROME_PATHS + EDGE_PATHS
+
+# Common Anti-Detection & Anti-Throttling Flags
+BASE_BROWSER_FLAGS = [
     "--disable-blink-features=AutomationControlled",
     "--disable-infobars",
     # Anti-throttling saat browser di-minimize / background
@@ -67,3 +85,8 @@ CHROME_FLAGS = [
     "--no-first-run",
     "--no-default-browser-check",
 ]
+
+CHROME_FLAGS = [
+    f"--remote-debugging-port={DEFAULT_CDP_PORT}",
+    f"--user-data-dir={str(CHROME_PROFILE_DIR)}",
+] + BASE_BROWSER_FLAGS

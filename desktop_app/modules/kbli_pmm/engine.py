@@ -850,6 +850,48 @@ def _select_radio_option(page, container, option_label_text, option_value="3", e
 
     return _is_target_active()
 
+def _check_keliling_warning(container, page):
+    """
+    Mendeteksi apakah terdapat warning/pesan anomali Usaha Keliling (R.9a=2) pada formulir.
+    Pesan: 'Jika R.9a diisi kode 2 (Usaha Keliling), maka R.13c diisi kode 10 (Usaha Keliling)'
+    """
+    try:
+        # 1. Periksa teks langsung di dalam container lokasi_usaha
+        c_text = (container.inner_text() or "").lower()
+        if (
+            ("usaha keliling" in c_text and "r.9a" in c_text) or
+            ("r.13c" in c_text and "kode 10" in c_text) or
+            ("kode 10" in c_text and "keliling" in c_text) or
+            ("r.9a diisi kode 2" in c_text)
+        ):
+            return True
+
+        # 2. Cek locator elemen text-destructive / alert di dalam container
+        warning_loc = container.locator(
+            "div[class*='text-destructive'], span, div[class*='destructive'], p, *[role='alert']"
+        )
+        if warning_loc.count() > 0:
+            for i in range(warning_loc.count()):
+                el = warning_loc.nth(i)
+                if el.is_visible():
+                    txt = (el.inner_text() or "").lower()
+                    if "usaha keliling" in txt or "r.9a diisi kode 2" in txt or "kode 10" in txt or "r.13c" in txt:
+                        return True
+
+        # 3. Fallback periksa pada tingkat page
+        page_warning = page.locator(
+            "div[id^='lokasi_usaha'] div[class*='text-destructive'], "
+            "div[id^='lokasi_usaha'] span:has-text('Usaha Keliling'), "
+            "div[class*='text-destructive']:has-text('R.9a diisi kode 2')"
+        )
+        if page_warning.count() > 0:
+            for i in range(page_warning.count()):
+                if page_warning.nth(i).is_visible():
+                    return True
+    except Exception:
+        pass
+    return False
+
 def _process_pmm_characteristics(page, kbli_akhir="", event_bus=None, worker_prefix=""):
     """
     Menjalankan proses pengisian karakteristik usaha spesifik KBLI PMM:
@@ -939,41 +981,17 @@ def _process_pmm_characteristics(page, kbli_akhir="", event_bus=None, worker_pre
 
         random_sleep(0.3, 0.6, event_bus=event_bus)
 
-        # Validasi Khusus Pemilihan Lokasi Usaha untuk KBLI 56102:
-        # Jika terdapat info/warning bahwa usaha tersebut adalah "Usaha Keliling" (R.9a=2),
-        # maka opsi lokasi usaha dialihkan ke 10. Keliling (bukan 5. Kedai, stan, tenda).
+        # Validasi Khusus Pemilihan Lokasi Usaha untuk KBLI 56102 (Tahap 1: Pre-selection check):
+        # Jika sudah tampak warning/info Usaha Keliling (R.9a=2), target langsung dialihkan ke 10. Keliling.
         if s_no == "13. c" and kbli_clean == "56102":
-            is_keliling = False
-            try:
-                # 1. Cek locator elemen warning text-destructive di dalam container lokasi_usaha
-                warning_loc = container.locator(
-                    "div[class*='text-destructive']:has-text('Usaha Keliling'), "
-                    "span:has-text('Usaha Keliling'), "
-                    "*:has-text('R.9a diisi kode 2'), "
-                    "*:has-text('kode 10 (Usaha Keliling)')"
-                )
-                if warning_loc.count() > 0:
-                    for i in range(warning_loc.count()):
-                        if warning_loc.nth(i).is_visible():
-                            is_keliling = True
-                            break
-
-                # 2. Fallback periksa inner_text container
-                if not is_keliling:
-                    c_text = (container.inner_text() or "").lower()
-                    if "usaha keliling" in c_text and "r.9a" in c_text:
-                        is_keliling = True
-            except Exception:
-                pass
-
-            if is_keliling:
+            if _check_keliling_warning(container, page):
                 logger.bot(f"{worker_prefix}[13. c] Terdeteksi warning Usaha Keliling (R.9a=2) pada KBLI 56102 -> Target Lokasi Usaha diubah ke '10. Keliling'.")
                 s_val = "10"
                 s_lbl = "Keliling"
                 s_disp = "10. Keliling"
                 lokasi_target_disp = "10. Keliling"
             else:
-                logger.bot(f"{worker_prefix}[13. c] Tidak ada warning Usaha Keliling -> Target Lokasi Usaha tetap '{s_disp}'.")
+                logger.bot(f"{worker_prefix}[13. c] Belum ada warning Usaha Keliling -> Target Lokasi Usaha awal '{s_disp}'.")
 
         # Pilih opsi radio target
         ok = _select_radio_option(
@@ -986,6 +1004,27 @@ def _process_pmm_characteristics(page, kbli_akhir="", event_bus=None, worker_pre
         else:
             logger.warning(f"⚠️ {worker_prefix}[{s_no}] Gagal memilih opsi '{s_disp}' pada rincian {s_name}.")
             return False, "GAGAL", f"Gagal memilih '{s_disp}' pada rincian {s_no}"
+
+        # Validasi Khusus Pemilihan Lokasi Usaha untuk KBLI 56102 (Tahap 2: Post-selection check):
+        # Jika baru saja memilih Kedai (bukan 10. Keliling), beri jeda Fasih untuk memicu validasi silang (cross-validation).
+        # Jika muncul warning 'Jika R.9a diisi kode 2 (Usaha Keliling), maka R.13c diisi kode 10',
+        # langsung koreksi dan alihkan pilihan ke '10. Keliling'!
+        if s_no == "13. c" and kbli_clean == "56102" and s_val != "10":
+            random_sleep(0.6, 1.0, event_bus=event_bus)
+            if _check_keliling_warning(container, page):
+                logger.bot(f"{worker_prefix}[13. c] ⚠️ Terdeteksi validasi peringatan Usaha Keliling (R.9a=2) muncul setelah memilih Kedai! Mengoreksi dan mengalihkan target ke '10. Keliling'...")
+                ok_keliling = _select_radio_option(
+                    page, container, option_label_text="Keliling", option_value="10",
+                    event_bus=event_bus, worker_prefix=worker_prefix
+                )
+                if ok_keliling:
+                    s_val = "10"
+                    s_lbl = "Keliling"
+                    s_disp = "10. Keliling"
+                    lokasi_target_disp = "10. Keliling"
+                    logger.bot(f"{worker_prefix}[13. c] ✅ Berhasil mengoreksi lokasi usaha ke '10. Keliling'. Peringatan telah terselesaikan.")
+                else:
+                    logger.warning(f"⚠️ {worker_prefix}[13. c] Gagal mengoreksi lokasi usaha ke '10. Keliling'.")
 
         # Jeda antar rincian (beri waktu DOM Fasih merespons bila memunculkan rincian berikutnya)
         random_sleep(0.4, 0.7, event_bus=event_bus)
@@ -1290,6 +1329,11 @@ class KBLIPMMEngine:
             self.num_workers = max(1, min(5, int(raw_workers)))
         except (ValueError, TypeError):
             self.num_workers = 2
+
+        # Browser & CDP options
+        self.browser_type = self.config_options.get("browser_type") or BrowserManager.get_active_browser()
+        self.incognito = self.config_options.get("incognito") if self.config_options.get("incognito") is not None else BrowserManager.is_incognito_active()
+        self.cdp_url = self.config_options.get("cdp_url") or BrowserManager.get_cdp_url(self.browser_type)
 
         if self.debug_review_submit and self.num_workers > 1:
             logger.warning("⚠️ Mode Review Debugging aktif: Jumlah worker disetel ke 1 agar review dapat dilakukan teratur.")
@@ -1856,11 +1900,13 @@ class KBLIPMMEngine:
             })
             return
 
-        # 2. Hubungkan ke Chrome CDP
-        is_running, b_name = BrowserManager.is_cdp_running()
+        # 2. Hubungkan ke Browser CDP (atau luncurkan otomatis jika belum aktif)
+        cdp_port = BrowserManager.get_cdp_port(self.browser_type)
+        b_label = "Microsoft Edge" if self.browser_type == "edge" else "Google Chrome"
+        is_running, b_name = BrowserManager.is_cdp_running(browser_type=self.browser_type, port=cdp_port)
         if not is_running:
-            logger.info("Browser belum aktif di port 9222. Meluncurkan Google Chrome secara otomatis...")
-            launched, launch_msg = BrowserManager.launch_browser()
+            logger.info(f"Browser ({b_label}) belum aktif di port {cdp_port}. Meluncurkan {b_label} secara otomatis...")
+            launched, launch_msg = BrowserManager.launch_browser(browser_type=self.browser_type, incognito=self.incognito)
             if not launched:
                 logger.error(f"Gagal meluncurkan browser: {launch_msg}")
                 self.event_bus.set_state(EngineState.IDLE)
@@ -1875,7 +1921,7 @@ class KBLIPMMEngine:
         logger.info("Memeriksa status otentikasi SSO Fasih awal...")
         try:
             with sync_playwright() as p_probe:
-                browser_probe = p_probe.chromium.connect_over_cdp(CDP_URL)
+                browser_probe = p_probe.chromium.connect_over_cdp(self.cdp_url)
                 context_probe = browser_probe.contexts[0]
                 page_probe = BrowserManager.find_authenticated_page(context_probe)
                 if not page_probe:
@@ -1959,7 +2005,7 @@ class KBLIPMMEngine:
             w_tag = f"[W-{w_id}] "
             try:
                 with sync_playwright() as p_worker:
-                    browser = p_worker.chromium.connect_over_cdp(CDP_URL)
+                    browser = p_worker.chromium.connect_over_cdp(self.cdp_url)
                     context = browser.contexts[0]
 
                     file_label = Path(self.excel_path).stem[:10] if self.excel_path else "PMM"

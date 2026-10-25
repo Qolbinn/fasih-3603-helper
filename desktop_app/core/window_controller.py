@@ -11,18 +11,20 @@ try:
 except ImportError:
     HAS_WIN32 = False
 
-from config import DEFAULT_CDP_PORT, APP_NAME
+from config import CHROME_CDP_PORT, EDGE_CDP_PORT, DEFAULT_CDP_PORT, APP_NAME
 
 class WindowController:
     @staticmethod
     def get_cdp_pids():
         """
-        Mengidentifikasi PID proses browser (Chrome / Edge) yang membuka port CDP 9222
-        atau menggunakan flag remote-debugging / chrome_profile khusus Fasih Helper.
+        Mengidentifikasi PID proses browser (Chrome / Edge) yang membuka port CDP 9222 / 9223
+        atau menggunakan flag remote-debugging / chrome_profile / edge_profile khusus Fasih Helper.
         """
         pids = set()
         if not HAS_WIN32:
             return pids
+
+        valid_ports = {CHROME_CDP_PORT, EDGE_CDP_PORT, DEFAULT_CDP_PORT}
 
         # 1. Cari melalui command line proses
         try:
@@ -32,7 +34,13 @@ class WindowController:
                     if 'chrome' not in name and 'edge' not in name:
                         continue
                     cmdline = " ".join(p.info.get('cmdline') or [])
-                    if f"--remote-debugging-port={DEFAULT_CDP_PORT}" in cmdline or "chrome_profile" in cmdline:
+                    is_match = (
+                        any(f"--remote-debugging-port={pt}" in cmdline for pt in valid_ports)
+                        or "--remote-debugging-port=" in cmdline
+                        or "chrome_profile" in cmdline
+                        or "edge_profile" in cmdline
+                    )
+                    if is_match:
                         pids.add(p.info['pid'])
                         # Sertakan juga child processes jika ada
                         try:
@@ -49,7 +57,7 @@ class WindowController:
         if not pids:
             try:
                 for conn in psutil.net_connections(kind='tcp'):
-                    if conn.laddr.port == DEFAULT_CDP_PORT and conn.status == psutil.CONN_LISTEN:
+                    if conn.laddr.port in valid_ports and conn.status == psutil.CONN_LISTEN:
                         if conn.pid:
                             pids.add(conn.pid)
                             try:

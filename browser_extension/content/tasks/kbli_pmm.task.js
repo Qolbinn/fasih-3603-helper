@@ -148,27 +148,65 @@
 
     const kbliClean = String(kbliAkhir || "").trim();
 
+    function checkKelilingWarning(boxEl) {
+      if (!boxEl) return false;
+      // 1. Periksa teks langsung di boxLokasi
+      const boxText = (boxEl.innerText || boxEl.textContent || "").toLowerCase();
+      if (
+        (boxText.includes("usaha keliling") && boxText.includes("r.9a")) ||
+        (boxText.includes("r.13c") && boxText.includes("kode 10")) ||
+        (boxText.includes("kode 10") && boxText.includes("keliling")) ||
+        boxText.includes("r.9a diisi kode 2")
+      ) {
+        return true;
+      }
+      // 2. Periksa elemen destructive / alert di dalam boxLokasi
+      const warningElements = boxEl.querySelectorAll("div[class*='text-destructive'], span, p, div[class*='destructive'], *[role='alert']");
+      for (const w of warningElements) {
+        if (!FH.isVisible(w)) continue;
+        const txt = (w.textContent || "").toLowerCase();
+        if (txt.includes("usaha keliling") || txt.includes("r.9a diisi kode 2") || txt.includes("kode 10") || txt.includes("r.13c")) {
+          return true;
+        }
+      }
+      // 3. Fallback periksa elemen warning di dokumen terkait R.9a / 13c
+      const pageWarnings = document.querySelectorAll("div[id^='lokasi_usaha'] div[class*='text-destructive'], div[class*='text-destructive']");
+      for (const pw of pageWarnings) {
+        if (!FH.isVisible(pw)) continue;
+        const ptxt = (pw.textContent || "").toLowerCase();
+        if (ptxt.includes("r.9a diisi kode 2") || (ptxt.includes("usaha keliling") && ptxt.includes("r.13c"))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     if (kbliClean === "56101") {
       FH.log("info", "KBLI 56101 -> Memilih lokasi usaha '9. Restoran, warung makan, sejenisnya'...");
       await FH.selectRadioOption(boxLokasi, "Restoran", "09");
     } else if (kbliClean === "56102") {
-      // Validasi khusus 56102: Deteksi warning "Usaha Keliling" (R.9a=2)
-      let isKeliling = false;
-      const warningElements = boxLokasi.querySelectorAll("div[class*='text-destructive'], span, p");
-      for (const w of warningElements) {
-        const txt = (w.textContent || "").toLowerCase();
-        if (txt.includes("usaha keliling") || txt.includes("r.9a diisi kode 2") || txt.includes("kode 10")) {
-          isKeliling = true;
-          break;
-        }
-      }
+      // Validasi khusus 56102 (Tahap 1: Pre-selection check):
+      // Jika peringatan Usaha Keliling (R.9a=2) sudah tampak sebelumnya, langsung pilih 10. Keliling
+      const hasWarningPre = checkKelilingWarning(boxLokasi);
 
-      if (isKeliling) {
-        FH.log("warn", "Terdeteksi peringatan 'Usaha Keliling'! Mengalihkan opsi ke '10. Keliling'...");
+      if (hasWarningPre) {
+        FH.log("warn", "[13. c] Terdeteksi peringatan Usaha Keliling (R.9a=2)! Memilih lokasi '10. Keliling'...");
         await FH.selectRadioOption(boxLokasi, "Keliling", "10");
       } else {
-        FH.log("info", "KBLI 56102 Standar -> Memilih lokasi usaha '5. Kedai, stan, tenda'...");
+        FH.log("info", "[13. c] KBLI 56102 Standar -> Memilih lokasi usaha '5. Kedai, stan, tenda'...");
         await FH.selectRadioOption(boxLokasi, "Kedai", "05");
+
+        // Validasi khusus 56102 (Tahap 2: Post-selection check):
+        // Beri jeda formulir Fasih melakukan validasi silang (cross-validation).
+        // Jika muncul pesan peringatan Usaha Keliling (R.9a=2), langsung koreksi dan alihkan ke 10. Keliling!
+        await FH.randomSleep(0.6, 1.0);
+        const hasWarningPost = checkKelilingWarning(boxLokasi);
+        if (hasWarningPost) {
+          FH.log("warn", "[13. c] ⚠️ Terdeteksi validasi peringatan Usaha Keliling (R.9a=2) setelah memilih Kedai! Mengoreksi dan mengalihkan ke '10. Keliling'...");
+          await FH.selectRadioOption(boxLokasi, "Keliling", "10");
+          await FH.randomSleep(0.5, 0.8);
+          FH.log("info", "[13. c] ✅ Berhasil mengoreksi lokasi usaha ke '10. Keliling'. Peringatan terselesaikan.");
+        }
       }
     } else {
       FH.log("warn", `KBLI '${kbliClean}' di luar 56101/56102. Mencoba memilih lokasi restoran/kedai...`);

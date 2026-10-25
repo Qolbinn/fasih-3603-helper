@@ -430,8 +430,6 @@
         await FH.randomSleep(0.3, 0.6);
       }
 
-      await FH.randomSleep(0.5, 0.8);
-      await verifyEformTotal(SELECTORS.total_aset, taClean, "Total Aset");
       remarksAset = "#4";
     } else {
       FH.log("info", `Total Aset SAMA (Clean: ${taClean} vs RAW: ${taRaw}) -> Lewati perhitungan aset.`);

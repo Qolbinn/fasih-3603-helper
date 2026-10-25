@@ -465,41 +465,129 @@
   FH.selectRadioOption = async function (containerEl, optionText, optionValue = null) {
     if (!containerEl) throw new Error("Container radio tidak ditemukan");
 
-    // Cari button radio option di dalam container
-    let targetBtn = null;
-    const buttons = containerEl.querySelectorAll("button[role='radio'], button[type='button'], div[role='radio']");
-
-    for (const btn of buttons) {
-      const txt = (btn.textContent || "").trim();
-      const val = btn.getAttribute("value") || btn.getAttribute("data-value") || "";
-      if ((optionValue && val === optionValue) || (optionText && txt.toLowerCase().includes(optionText.toLowerCase()))) {
-        targetBtn = btn;
-        break;
+    // Format nilai target (misal: "05" dan "5", "10")
+    const valStr = optionValue !== null && optionValue !== undefined ? String(optionValue).trim() : "";
+    let valAlt = "";
+    if (valStr) {
+      if (valStr.startsWith("0") && valStr.length > 1) {
+        valAlt = valStr.replace(/^0+/, "");
+      } else if (!isNaN(valStr) && valStr.length === 1) {
+        valAlt = `0${valStr}`;
+      } else {
+        valAlt = valStr;
       }
     }
 
-    if (!targetBtn) {
+    // 1. Cari target input bila ada optionValue
+    let targetInput = null;
+    if (valStr) {
+      targetInput = containerEl.querySelector(`input[type='radio'][value='${valStr}'], input[type='radio'][value='${valAlt}']`);
+    }
+
+    // 2. Cari target label bila ada optionText
+    let targetLabel = null;
+    if (optionText) {
       const labels = containerEl.querySelectorAll("label");
       for (const lbl of labels) {
-        if (lbl.textContent && lbl.textContent.toLowerCase().includes(optionText.toLowerCase())) {
-          targetBtn = lbl;
+        const txt = (lbl.textContent || "").toLowerCase();
+        if (txt.includes(optionText.toLowerCase())) {
+          targetLabel = lbl;
           break;
         }
       }
     }
 
-    if (!targetBtn) {
+    // 3. Tentukan pembungkus item (group) dan kontrol visual (div/button role='radio')
+    const targetGroup = (targetInput ? targetInput.closest("div[role='group']") : null) ||
+                        (targetLabel ? targetLabel.closest("div[role='group']") : null);
+
+    let targetControl = targetGroup ? targetGroup.querySelector("div[role='radio'], button[role='radio']") : null;
+
+    // Fallback pencarian kontrol jika group belum ketemu
+    if (!targetControl && !targetLabel && !targetInput) {
+      const buttons = containerEl.querySelectorAll("button[role='radio'], button[type='button'], div[role='radio']");
+      for (const btn of buttons) {
+        const txt = (btn.textContent || "").trim().toLowerCase();
+        const val = btn.getAttribute("value") || btn.getAttribute("data-value") || "";
+        if ((valStr && (val === valStr || val === valAlt)) || (optionText && txt.includes(optionText.toLowerCase()))) {
+          targetControl = btn;
+          break;
+        }
+      }
+    }
+
+    if (!targetInput && !targetLabel && !targetControl && !targetGroup) {
       throw new Error(`Opsi radio '${optionText || optionValue}' tidak ditemukan di container`);
     }
 
-    await FH.humanClick(targetBtn);
-    await FH.randomSleep(0.5, 0.8);
+    // Helper untuk cek apakah target sudah aktif
+    function isTargetActive() {
+      if (targetInput && (targetInput.checked || targetInput.getAttribute("data-checked") !== null)) return true;
+      if (targetGroup && targetGroup.getAttribute("data-checked") !== null) return true;
+      if (targetControl && (targetControl.getAttribute("data-checked") !== null || targetControl.getAttribute("aria-checked") === "true")) return true;
+      if (targetLabel && targetLabel.getAttribute("data-checked") !== null) return true;
+      return false;
+    }
+
+    if (isTargetActive()) {
+      return true;
+    }
+
+    // Multi-stage selection:
+    // Metode 1: Klik kontrol visual radio (div role='radio' / button)
+    if (targetControl && FH.isVisible(targetControl)) {
+      try {
+        await FH.humanClick(targetControl);
+        await FH.randomSleep(0.3, 0.5);
+      } catch (e) {}
+    }
+
+    if (isTargetActive()) return true;
+
+    // Metode 2: Klik label
+    if (targetLabel && FH.isVisible(targetLabel)) {
+      try {
+        await FH.humanClick(targetLabel);
+        await FH.randomSleep(0.3, 0.5);
+      } catch (e) {}
+    }
+
+    if (isTargetActive()) return true;
+
+    // Metode 3: Klik pembungkus group
+    if (targetGroup && FH.isVisible(targetGroup)) {
+      try {
+        await FH.humanClick(targetGroup);
+        await FH.randomSleep(0.3, 0.5);
+      } catch (e) {}
+    }
+
+    if (isTargetActive()) return true;
+
+    // Metode 4: Synthetic React event dispatch pada input & click control
+    if (targetInput) {
+      try {
+        targetInput.checked = true;
+        targetInput.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        if (targetControl && typeof targetControl.click === "function") {
+          targetControl.click();
+        }
+        if (targetLabel && typeof targetLabel.click === "function") {
+          targetLabel.click();
+        }
+        await FH.randomSleep(0.4, 0.7);
+      } catch (e) {}
+    }
+
+    return isTargetActive();
   };
 
   FH.isAnyRadioSelected = function (containerEl) {
     if (!containerEl) return false;
     const activeBtn = containerEl.querySelector(
-      "button[aria-checked='true'], button[data-state='checked'], input[type='radio']:checked"
+      "button[aria-checked='true'], button[data-state='checked'], div[role='group'][data-checked], div[role='radio'][data-checked], div[role='radio'][aria-checked='true'], input[type='radio']:checked, input[type='radio'][data-checked], div[id$='-indicator'][data-checked]"
     );
     return !!activeBtn;
   };
