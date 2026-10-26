@@ -3,30 +3,30 @@
 # ==============================================================================
 
 EXCEL_NIK_R29_COLUMNS_CONFIG = {
-    # Kolom Identitas & Data Sosial Ekonomi (NIK) dari Excel
-    "assignment_id": [
-        "assignment_id", "assignment id", "id_assignment", "id assignment",
-        "assignment", "id"
-    ],
+    # Kolom Identitas & Data Sosial Ekonomi (NIK R29) dari Excel
     "no_urut_kk": [
         "no_urut_kk", "no urut kk", "no_urut", "nourutkk",
-        "no urut", "no_kk_urut", "urut_kk", "no_art"
+        "no urut", "no_kk_urut", "urut_kk", "no_art", "nourut"
     ],
-    "nomor_induk_kependudukan": [
-        "nomor_induk_kependudukan", "nik", "nomor induk kependudukan",
-        "no_nik", "no nik", "nik_anggota", "nik_art"
+    "nama_dtsen": [
+        "nama_dtsen", "nama dtsen", "nama", "nama_art",
+        "nama_lengkap", "nama lengkap", "nama_anggota", "nama anggota"
+    ],
+    "nik_dtsen": [
+        "nik_dtsen", "nik dtsen", "nik", "nomor_induk_kependudukan",
+        "no_nik", "nik_lama"
+    ],
+    "nik_length": [
+        "nik_length", "nik length", "length", "panjang_nik",
+        "panjang nik", "len_nik", "panjang"
+    ],
+    "matched": [
+        "matched", "nik_matched", "nik matched", "matched_nik",
+        "nik_match", "match"
     ],
     "url": [
         "url", "link_fasih_sm", "link",
         "link fasih", "link_fasih", "tautan"
-    ],
-    "nomor_kartu_keluarga": [
-        "nomor_kartu_keluarga", "nomor kartu keluarga", "no_kk",
-        "no kk", "nkk", "nomor_kk", "kartu_keluarga"
-    ],
-    "nama": [
-        "nama", "nama_lengkap", "nama lengkap",
-        "nama_anggota", "nama anggota", "nama_art"
     ],
 
     # Kolom Status & Keterangan Eksekusi
