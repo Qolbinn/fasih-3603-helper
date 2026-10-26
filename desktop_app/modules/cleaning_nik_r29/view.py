@@ -319,7 +319,7 @@ class CleaningNIKR29View(ctk.CTkFrame):
             arrowcolor="#94a3b8"
         )
 
-        columns = ("no", "baris", "assignment_id", "no_urut_kk", "nama", "nik", "no_kk", "url", "status", "ket")
+        columns = ("no", "baris", "no_urut_kk", "nama_dtsen", "nik_dtsen", "nik_length", "matched", "url", "status", "ket")
         self.tree = ttk.Treeview(
             table_container,
             columns=columns,
@@ -330,25 +330,25 @@ class CleaningNIKR29View(ctk.CTkFrame):
 
         self.tree.heading("no", text="No")
         self.tree.heading("baris", text="Baris")
-        self.tree.heading("assignment_id", text="Assignment ID")
         self.tree.heading("no_urut_kk", text="No Urut")
-        self.tree.heading("nama", text="Nama Anggota (ART)")
-        self.tree.heading("nik", text="NIK")
-        self.tree.heading("no_kk", text="No KK")
+        self.tree.heading("nama_dtsen", text="Nama DTSEN")
+        self.tree.heading("nik_dtsen", text="NIK DTSEN")
+        self.tree.heading("nik_length", text="Panjang")
+        self.tree.heading("matched", text="NIK Matched")
         self.tree.heading("url", text="Link Fasih")
         self.tree.heading("status", text="Status")
         self.tree.heading("ket", text="Keterangan")
 
         self.tree.column("no", width=45, anchor="center")
         self.tree.column("baris", width=55, anchor="center")
-        self.tree.column("assignment_id", width=130, anchor="center")
-        self.tree.column("no_urut_kk", width=70, anchor="center")
-        self.tree.column("nama", width=180, anchor="w")
-        self.tree.column("nik", width=140, anchor="center")
-        self.tree.column("no_kk", width=140, anchor="center")
+        self.tree.column("no_urut_kk", width=75, anchor="center")
+        self.tree.column("nama_dtsen", width=180, anchor="w")
+        self.tree.column("nik_dtsen", width=145, anchor="center")
+        self.tree.column("nik_length", width=65, anchor="center")
+        self.tree.column("matched", width=145, anchor="center")
         self.tree.column("url", width=160, anchor="w")
         self.tree.column("status", width=95, anchor="center")
-        self.tree.column("ket", width=220, anchor="w")
+        self.tree.column("ket", width=230, anchor="w")
 
         # Tags pewarnaan status baris
         self.tree.tag_configure("even", background="#1e293b")
@@ -710,14 +710,14 @@ class CleaningNIKR29View(ctk.CTkFrame):
             item_id = self.tree.insert("", "end", values=(
                 i + 1,
                 row["row_idx"],
-                row["assignment_id"],
-                row["no_urut_kk"],
-                row["nama"],
-                row["nomor_induk_kependudukan"],
-                row["nomor_kartu_keluarga"],
+                row.get("no_urut_kk", ""),
+                row.get("nama_dtsen", ""),
+                row.get("nik_dtsen", ""),
+                row.get("nik_length", ""),
+                row.get("matched", "") if row.get("matched") else "-",
                 row["url"][:25] + "..." if len(str(row["url"])) > 25 else row["url"],
-                row["status"] or "⏳ BELUM",
-                row["keterangan"] or ""
+                row.get("status") or "⏳ BELUM",
+                row.get("keterangan") or ""
             ), tags=(stripe_tag, status_tag))
             self.tree_item_map[row["row_idx"]] = item_id
 

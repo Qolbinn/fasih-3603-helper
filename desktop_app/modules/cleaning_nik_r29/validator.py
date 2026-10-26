@@ -8,12 +8,12 @@ from modules.cleaning_nik_r29.selectors import EXCEL_NIK_R29_COLUMNS_CONFIG
 
 class ExcelNIKR29Validator:
     MANDATORY_KEYS = [
-        "assignment_id",
         "no_urut_kk",
-        "nomor_induk_kependudukan",
-        "url",
-        "nomor_kartu_keluarga",
-        "nama"
+        "nik_dtsen",
+        "nik_length",
+        "matched",
+        "nama_dtsen",
+        "url"
     ]
 
     @staticmethod
@@ -30,7 +30,7 @@ class ExcelNIKR29Validator:
     @classmethod
     def validate_excel_file(cls, file_path):
         """
-        Melakukan validasi menyeluruh terhadap file Excel input Data Cleaning NIK.
+        Melakukan validasi menyeluruh terhadap file Excel input Data Cleaning NIK R29.
         Mengembalikan dict hasil pemeriksaan & data pratinjau.
         """
         p = Path(file_path)
@@ -103,12 +103,12 @@ class ExcelNIKR29Validator:
             }
 
         # 4. Pindai baris data
-        assignment_col = col_map.get("assignment_id")
         no_urut_col = col_map.get("no_urut_kk")
-        nik_col = col_map.get("nomor_induk_kependudukan")
+        nama_col = col_map.get("nama_dtsen")
+        nik_col = col_map.get("nik_dtsen")
+        len_col = col_map.get("nik_length")
+        matched_col = col_map.get("matched")
         url_col = col_map.get("url")
-        no_kk_col = col_map.get("nomor_kartu_keluarga")
-        nama_col = col_map.get("nama")
         status_col = col_map.get("status")
         ket_col = col_map.get("keterangan")
 
@@ -126,11 +126,11 @@ class ExcelNIKR29Validator:
 
             total_rows += 1
 
-            assignment_val = sheet.cell(row=r, column=assignment_col).value if assignment_col else ""
             no_urut_val = sheet.cell(row=r, column=no_urut_col).value if no_urut_col else ""
-            nik_val = sheet.cell(row=r, column=nik_col).value if nik_col else ""
-            no_kk_val = sheet.cell(row=r, column=no_kk_col).value if no_kk_col else ""
             nama_val = sheet.cell(row=r, column=nama_col).value if nama_col else ""
+            nik_val = sheet.cell(row=r, column=nik_col).value if nik_col else ""
+            len_val = sheet.cell(row=r, column=len_col).value if len_col else ""
+            matched_val = sheet.cell(row=r, column=matched_col).value if matched_col else ""
             st_val = sheet.cell(row=r, column=status_col).value if status_col else ""
             ket_val = sheet.cell(row=r, column=ket_col).value if ket_col else ""
 
@@ -140,7 +140,7 @@ class ExcelNIKR29Validator:
             else:
                 pending_rows += 1
 
-            # Format NIK & No KK agar tidak scientific notation jika numeric
+            # Format teks angka agar tidak scientific notation jika numeric
             def clean_id_str(val):
                 if val is None:
                     return ""
@@ -151,12 +151,12 @@ class ExcelNIKR29Validator:
 
             rows_data.append({
                 "row_idx": r,
-                "assignment_id": clean_id_str(assignment_val),
                 "no_urut_kk": clean_id_str(no_urut_val),
-                "nomor_induk_kependudukan": clean_id_str(nik_val),
+                "nama_dtsen": str(nama_val or "").strip(),
+                "nik_dtsen": clean_id_str(nik_val),
+                "nik_length": clean_id_str(len_val),
+                "matched": clean_id_str(matched_val),
                 "url": str(url_val).strip(),
-                "nomor_kartu_keluarga": clean_id_str(no_kk_val),
-                "nama": str(nama_val or "").strip(),
                 "status": str(st_val or "").strip(),
                 "keterangan": str(ket_val or "").strip()
             })
@@ -190,20 +190,20 @@ class ExcelNIKR29Validator:
     @classmethod
     def generate_template_excel(cls, output_path):
         """
-        Membuat template Excel standar untuk modul Data Cleaning Sosial Ekonomi (NIK).
+        Membuat template Excel standar untuk modul Data Cleaning Sosial Ekonomi (NIK R29).
         Berisi header kolom wajib dan beberapa baris contoh data.
         """
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Data_Cleaning_NIK"
+        ws.title = "Data_Cleaning_NIK_R29"
 
         headers = [
-            "assignment_id",
             "no_urut_kk",
-            "nomor_induk_kependudukan",
+            "nama_dtsen",
+            "nik_dtsen",
+            "nik_length",
+            "matched",
             "url",
-            "nomor_kartu_keluarga",
-            "nama",
             "Status_Eksekusi",
             "Keterangan"
         ]
@@ -233,22 +233,42 @@ class ExcelNIKR29Validator:
         # Baris Contoh Data
         sample_rows = [
             [
-                "360301000100101",
                 "1",
-                "3603010101900001",
-                "https://fasih-sm.bps.go.id/penugasan/detail/contoh-id-1",
-                "3603010101200001",
                 "AHMAD SUDIRMAN",
+                "3603010101900001",
+                "16",
+                None,
+                "https://fasih-sm.bps.go.id/penugasan/detail/contoh-id-1",
                 None,
                 None
             ],
             [
-                "360301000100102",
                 "2",
-                "3603014101920002",
-                "https://fasih-sm.bps.go.id/penugasan/detail/contoh-id-2",
-                "3603010101200001",
                 "SITI AMINAH",
+                "3603014101920002",
+                "16",
+                "3603014101920009",
+                "https://fasih-sm.bps.go.id/penugasan/detail/contoh-id-2",
+                None,
+                None
+            ],
+            [
+                "3",
+                "BUDI SANTOSO",
+                "36030111",
+                "8",
+                "7777",
+                "https://fasih-sm.bps.go.id/penugasan/detail/contoh-id-3",
+                None,
+                None
+            ],
+            [
+                "4",
+                "RINA WATI",
+                "36030122",
+                "8",
+                "9999",
+                "https://fasih-sm.bps.go.id/penugasan/detail/contoh-id-4",
                 None,
                 None
             ]
@@ -264,8 +284,8 @@ class ExcelNIKR29Validator:
                 c = ws.cell(row=r_idx, column=c_idx)
                 c.border = thin_border
                 c.font = Font(name="Segoe UI", size=10)
-                # Text align center untuk ID, no_urut, NIK, No KK, status
-                if c_idx in [1, 2, 3, 5, 7]:
+                # Text align center untuk no_urut, NIK, length, matched, status
+                if c_idx in [1, 3, 4, 5, 7]:
                     c.alignment = Alignment(horizontal="center", vertical="center")
                 else:
                     c.alignment = Alignment(horizontal="left", vertical="center")

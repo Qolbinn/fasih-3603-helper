@@ -75,6 +75,65 @@ def clean_nik_str(val):
         s = s[:-2]
     return re.sub(r"[^\d]", "", s)
 
+def clean_id_str(val):
+    """Membersihkan string ID / nomor urut dari format scientific/float .0."""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
+def clean_matched_str(val):
+    """Membersihkan nilai matched / nik_matched."""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    if s.lower() in ["nan", "none", "-", "null"]:
+        return ""
+    digits = re.sub(r"[^\d]", "", s)
+    if digits:
+        return digits
+    return s
+
+def parse_nik_length(val):
+    """Mengonversi panjang NIK menjadi integer."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    try:
+        return int(s)
+    except Exception:
+        return None
+
+def safe_fill_input(page, input_locator, text_value, event_bus=None):
+    """Mengosongkan dan mengisi teks ke elemen input serta memicu event input/change/blur."""
+    if event_bus and event_bus.is_stop_requested():
+        return
+    input_locator.wait_for(state="visible", timeout=25000)
+    try:
+        input_locator.scroll_into_view_if_needed(timeout=5000)
+    except Exception:
+        pass
+    input_locator.click()
+    human_jitter(0.05, 0.15, event_bus=event_bus)
+    input_locator.fill(str(text_value))
+    human_jitter(0.05, 0.15, event_bus=event_bus)
+    try:
+        input_locator.dispatch_event("input")
+        input_locator.dispatch_event("change")
+    except Exception:
+        pass
+    try:
+        page.keyboard.press("Tab")
+    except Exception:
+        pass
+    human_jitter(0.1, 0.2, event_bus=event_bus)
+
 def add_remarks_to_element(page, container_locator_or_sel, note_text, event_bus=None, worker_prefix=""):
     """Membuka modal Catatan pada elemen container, mengetik catatan, klik simpan, lalu tutup modal."""
     if isinstance(container_locator_or_sel, str):
@@ -282,71 +341,80 @@ def _find_and_open_matching_art(page, excel_no_urut, excel_nama, event_bus=None,
 
     # Parsing no urut KK dari Excel (1-indexed)
     try:
-        raw_urut = clean_nik_str(excel_no_urut)
-        target_urut = int(raw_urut) if raw_urut else 1
+        raw_urut = clean_id_str(excel_no_urut)
+        target_urut = int(raw_urut) if raw_urut else None
     except Exception:
-        target_urut = 1
+        target_urut = None
 
     art_names = [name for _, name in valid_items]
     logger.bot(f"{worker_prefix}Ditemukan {count} anggota keluarga di subsidebar: {art_names}")
-    logger.bot(f"{worker_prefix}Mencocokkan urutan ke-{target_urut} dengan target nama '{excel_nama}'...")
+    logger.bot(f"{worker_prefix}Mencari anggota keluarga berdasarkan nama_dtsen: '{excel_nama}' (Target No Urut: {target_urut})...")
 
-    if target_urut < 1 or target_urut > count:
-        return False, None, f"No urut KK {target_urut} di luar jumlah anggota keluarga di web ({count} orang)"
-
-    # Cek anggota keluarga pada posisi target_urut (1-based index)
-    target_pos_idx = target_urut - 1
-    curr_loc, curr_name = valid_items[target_pos_idx]
-
-    # Validasi kesesuaian nama
+    # 1. Pencarian pertama: berdasarkan nama_dtsen
     norm_excel_nama = normalize_text(excel_nama)
-    norm_curr_name = normalize_text(curr_name)
+    matches = []
+    for idx, (item_loc, name) in enumerate(valid_items):
+        pos = idx + 1
+        if normalize_text(name) == norm_excel_nama:
+            matches.append((pos, item_loc, name))
 
-    if norm_excel_nama == norm_curr_name:
-        logger.success(f"{worker_prefix}Anggota keluarga COCOK pada urutan ke-{target_urut}: '{curr_name}'")
-        safe_click(page, curr_loc, timeout=20000, event_bus=event_bus)
-        random_sleep(1.2, 1.8, event_bus=event_bus)
-        return True, curr_name, None
-    else:
-        # Cek apakah nama tersebut ada di posisi lain
-        pos_found = None
-        for idx, (_, name) in enumerate(valid_items):
-            if normalize_text(name) == norm_excel_nama:
-                pos_found = idx + 1
-                break
-
-        if pos_found:
-            err_msg = f"Nama '{excel_nama}' ditemukan pada urutan ke-{pos_found}, tetapi di Excel tercatat urutan ke-{target_urut}. Urutan tidak cocok."
-        else:
-            err_msg = f"Anggota keluarga pada urutan ke-{target_urut} adalah '{curr_name}', tidak cocok dengan nama di Excel '{excel_nama}'."
-
+    if not matches:
+        err_msg = f"Nama '{excel_nama}' tidak ditemukan di daftar anggota keluarga eform Fasih."
         logger.warning(f"⚠️ {worker_prefix}{err_msg}")
-        return False, curr_name, err_msg
+        return False, None, err_msg
+
+    # 2. Jika sudah ketemu, cek apakah benar anggota keluarga nomor urut ke no_urut_kk
+    exact_match = None
+    if target_urut is not None:
+        for pos, item_loc, name in matches:
+            if pos == target_urut:
+                exact_match = (pos, item_loc, name)
+                break
+    else:
+        exact_match = matches[0]
+
+    if exact_match:
+        pos, item_loc, name = exact_match
+        logger.success(f"{worker_prefix}Anggota keluarga '{name}' COCOK pada urutan ke-{pos} (Target: {target_urut}).")
+        safe_click(page, item_loc, timeout=20000, event_bus=event_bus)
+        random_sleep(1.2, 1.8, event_bus=event_bus)
+        return True, name, None
+    else:
+        found_positions = ", ".join([str(p) for p, _, _ in matches])
+        err_msg = (
+            f"Nama '{excel_nama}' ditemukan pada urutan ke-{found_positions}, "
+            f"tetapi no_urut_kk di Excel adalah {excel_no_urut}. Nomor urut tidak sesuai."
+        )
+        logger.warning(f"⚠️ {worker_prefix}{err_msg}")
+        return False, None, err_msg
 
 
-def _verify_and_remark_nik(page, excel_nik, event_bus=None, worker_prefix=""):
+def _process_nik_r29_cleaning(
+    page,
+    nik_box,
+    inp_nik,
+    excel_nik_dtsen,
+    excel_nik_length,
+    excel_matched,
+    event_bus=None,
+    worker_prefix=""
+):
     """
-    Memeriksa isian pada rincian NIK (id nik_dtsen).
-    - Jika SAMA dengan nomor_induk_kependudukan di Excel: berikan remarks '#3' pada catatan rincian NIK.
-    - Jika BEDA: return False beserta keterangan beda.
+    Mengeksekusi aturan pembersihan NIK R29:
+    1. Cek apakah NIK anggota keluarga di eform Fasih sama dengan nik_dtsen di Excel.
+       Jika tidak sama -> return False (dilewati).
+    2. Cek kolom nik_matched di Excel:
+       - Jika nik_matched kosong dan nik_length = 16:
+         -> NIK di eform JANGAN diubah, beri remarks #0
+       - Jika nik_matched = 7777 dan nik_length != 16:
+         -> Isikan ke NIK eform 7777, beri remarks #0
+       - Jika nik_matched = 9999:
+         -> Isikan ke NIK eform 9999, beri remarks #0
+       - Jika nik_matched berisi nilai NIK 16 digit dan berbeda dengan NIK di eform:
+         -> Replace / ganti NIK di eform dengan nik_matched, beri remarks #3
+       - (Proteksi) Jika nik_matched 16 digit dan sudah sama persis dengan eform:
+         -> NIK tetap, beri remarks #3
     """
-    nik_box = page.locator(NIK_R29_SELECTORS["container_nik"]).first
-    try:
-        nik_box.wait_for(state="attached", timeout=25000)
-        nik_box.scroll_into_view_if_needed(timeout=5000)
-    except Exception:
-        pass
-
-    if nik_box.count() == 0:
-        raise Exception("Elemen rincian NIK (id nik_dtsen) tidak ditemukan di form")
-
-    # Ambil nilai NIK yang terisi di web
-    inp_nik = nik_box.locator(NIK_R29_SELECTORS["input_nik"]).first
-    try:
-        inp_nik.wait_for(state="visible", timeout=15000)
-    except PlaywrightTimeoutError:
-        raise Exception("Field input NIK tidak visible di halaman formulir")
-
     web_nik = ""
     try:
         web_nik = inp_nik.input_value().strip()
@@ -356,19 +424,77 @@ def _verify_and_remark_nik(page, excel_nik, event_bus=None, worker_prefix=""):
         web_nik = (inp_nik.get_attribute("value") or "").strip()
 
     clean_web = clean_nik_str(web_nik)
-    clean_excel = clean_nik_str(excel_nik)
+    clean_excel_dtsen = clean_nik_str(excel_nik_dtsen)
 
-    logger.bot(f"{worker_prefix}Memeriksa NIK (Web: '{web_nik}' vs Excel: '{excel_nik}')...")
+    logger.bot(f"{worker_prefix}Memeriksa NIK eform Fasih vs nik_dtsen Excel (Web: '{web_nik}' vs Excel: '{excel_nik_dtsen}')...")
 
-    if clean_web == clean_excel and clean_excel != "":
-        logger.success(f"{worker_prefix}NIK COCOK! (Web: '{web_nik}' == Excel: '{excel_nik}')")
-        logger.remarks(f"{worker_prefix}Memberikan remarks '#3' pada Catatan rincian NIK...")
-        add_remarks_to_element(page, nik_box, "#3", event_bus=event_bus, worker_prefix=worker_prefix)
-        return True, web_nik, None
-    else:
-        err_msg = f"NIK tidak sama (Web: '{web_nik}' vs Excel: '{excel_nik}')"
+    # Syarat: cek juga apakah NIK anggota keluarga tsb yang ada di eform fasih sama dengan nik_dtsen di excel
+    if clean_web != clean_excel_dtsen:
+        err_msg = f"NIK di eform ('{web_nik}') tidak sama dengan nik_dtsen di Excel ('{excel_nik_dtsen}')"
         logger.warning(f"⚠️ {worker_prefix}{err_msg}")
         return False, web_nik, err_msg
+
+    logger.success(f"{worker_prefix}NIK eform COCOK dengan nik_dtsen Excel ('{web_nik}' == '{excel_nik_dtsen}').")
+
+    # Langkah berikutnya: Evaluasi aturan berdasarkan nik_matched dan nik_length
+    parsed_len = parse_nik_length(excel_nik_length)
+    clean_matched = clean_matched_str(excel_matched)
+    is_matched_empty = (clean_matched == "")
+
+    logger.bot(f"{worker_prefix}Mengevaluasi aturan NIK R29: nik_matched='{clean_matched}', nik_length={parsed_len}...")
+
+    # Aturan 2: Jika nik_matched kosong dan nik_length = 16, maka NIK di eform jangan diubah, lalu beri remarks #0
+    if is_matched_empty and parsed_len == 16:
+        logger.bot(f"{worker_prefix}[Aturan 2] nik_matched kosong dan nik_length = 16. NIK di eform TIDAK diubah ('{web_nik}').")
+        logger.remarks(f"{worker_prefix}Memberikan remarks '#0' pada Catatan rincian NIK...")
+        add_remarks_to_element(page, nik_box, "#0", event_bus=event_bus, worker_prefix=worker_prefix)
+        return True, web_nik, "NIK tidak diubah, remark #0"
+
+    # Aturan 3: Jika nik_matched = 7777 dan nik_length != 16, isikan ke NIK eform 7777 dan beri remark #0
+    if clean_matched == "7777" and parsed_len != 16:
+        logger.bot(f"{worker_prefix}[Aturan 3] nik_matched = 7777 dan nik_length ({parsed_len}) != 16. Mengisi NIK eform dengan '7777'...")
+        safe_fill_input(page, inp_nik, "7777", event_bus=event_bus)
+        random_sleep(0.5, 0.8, event_bus=event_bus)
+        logger.remarks(f"{worker_prefix}Memberikan remarks '#0' pada Catatan rincian NIK...")
+        add_remarks_to_element(page, nik_box, "#0", event_bus=event_bus, worker_prefix=worker_prefix)
+        return True, "7777", "NIK diubah 7777, remark #0"
+
+    # Aturan 4: Jika nik_matched = 9999, isikan ke NIK eform 9999 dan beri remark #0
+    if clean_matched == "9999":
+        logger.bot(f"{worker_prefix}[Aturan 4] nik_matched = 9999. Mengisi NIK eform dengan '9999'...")
+        safe_fill_input(page, inp_nik, "9999", event_bus=event_bus)
+        random_sleep(0.5, 0.8, event_bus=event_bus)
+        logger.remarks(f"{worker_prefix}Memberikan remarks '#0' pada Catatan rincian NIK...")
+        add_remarks_to_element(page, nik_box, "#0", event_bus=event_bus, worker_prefix=worker_prefix)
+        return True, "9999", "NIK diubah 9999, remark #0"
+
+    # Aturan 5: Jika nik_matched berisi nilai NIK 16 digit dan berbeda dengan NIK yang ada di eform fasih, maka replace atau ganti NIK di eform fasih dengan NIK nik_matched, kemudian remark #3
+    if len(clean_matched) == 16 and clean_matched.isdigit():
+        if clean_matched != clean_web:
+            logger.bot(f"{worker_prefix}[Aturan 5] nik_matched 16 digit ('{clean_matched}') != eform ('{clean_web}'). Mengganti NIK di eform...")
+            safe_fill_input(page, inp_nik, clean_matched, event_bus=event_bus)
+            random_sleep(0.5, 0.8, event_bus=event_bus)
+            logger.remarks(f"{worker_prefix}Memberikan remarks '#3' pada Catatan rincian NIK...")
+            add_remarks_to_element(page, nik_box, "#3", event_bus=event_bus, worker_prefix=worker_prefix)
+            return True, clean_matched, f"NIK diganti {clean_matched}, remark #3"
+        else:
+            logger.bot(f"{worker_prefix}[Aturan 5] nik_matched 16 digit sudah sama dengan eform ('{clean_web}'). NIK tidak diubah.")
+            logger.remarks(f"{worker_prefix}Memberikan remarks '#3' pada Catatan rincian NIK...")
+            add_remarks_to_element(page, nik_box, "#3", event_bus=event_bus, worker_prefix=worker_prefix)
+            return True, clean_matched, f"NIK sudah sesuai {clean_matched}, remark #3"
+
+    # Jika tidak memenuhi aturan 2 - 5 di atas:
+    reasons = []
+    if is_matched_empty and parsed_len != 16:
+        reasons.append(f"nik_matched kosong namun nik_length = {parsed_len} (bukan 16)")
+    elif clean_matched == "7777" and parsed_len == 16:
+        reasons.append("nik_matched = 7777 namun nik_length = 16 (seharusnya != 16)")
+    else:
+        reasons.append(f"Kombinasi nik_matched='{clean_matched}' dan nik_length='{excel_nik_length}' tidak memenuhi kriteria aturan 2-5")
+
+    err_rule = "; ".join(reasons)
+    logger.warning(f"⚠️ {worker_prefix}{err_rule}")
+    return False, web_nik, err_rule
 
 def _submit_assignment_form(page, event_bus, row_idx, nama_art, debug_review=False, auto_minimize=True, worker_prefix=""):
     """
@@ -705,22 +831,22 @@ class CleaningNIKR29Engine:
         """Memproses satu baris penugasan Data Cleaning NIK R29 secara mandiri per worker."""
         w_tag = f"[W-{worker_id}] "
 
-        assignment_col = col_map.get("assignment_id")
         no_urut_col = col_map.get("no_urut_kk")
-        nik_col = col_map.get("nomor_induk_kependudukan")
+        nama_col = col_map.get("nama_dtsen")
+        nik_col = col_map.get("nik_dtsen")
+        len_col = col_map.get("nik_length")
+        matched_col = col_map.get("matched")
         url_col = col_map.get("url")
-        no_kk_col = col_map.get("nomor_kartu_keluarga")
-        nama_col = col_map.get("nama")
         status_col = col_map.get("status")
         ket_col = col_map.get("keterangan")
 
         with self.excel_lock:
             url_val = sheet.cell(row=row_idx, column=url_col).value if url_col else None
-            assignment_id = str(sheet.cell(row=row_idx, column=assignment_col).value or "").strip() if assignment_col else ""
-            no_urut_kk = str(sheet.cell(row=row_idx, column=no_urut_col).value or "").strip() if no_urut_col else ""
-            nik_val = str(sheet.cell(row=row_idx, column=nik_col).value or "").strip() if nik_col else ""
-            no_kk_val = str(sheet.cell(row=row_idx, column=no_kk_col).value or "").strip() if no_kk_col else ""
+            no_urut_kk = clean_id_str(sheet.cell(row=row_idx, column=no_urut_col).value) if no_urut_col else ""
             nama_art = str(sheet.cell(row=row_idx, column=nama_col).value or "").strip() if nama_col else ""
+            nik_val = clean_id_str(sheet.cell(row=row_idx, column=nik_col).value) if nik_col else ""
+            nik_length_val = sheet.cell(row=row_idx, column=len_col).value if len_col else ""
+            matched_val = sheet.cell(row=row_idx, column=matched_col).value if matched_col else ""
             status_val = str(sheet.cell(row=row_idx, column=status_col).value or "").strip() if status_col else ""
 
         if not url_val or str(url_val).strip() == "":
@@ -746,12 +872,16 @@ class CleaningNIKR29Engine:
         # Setup audit data record
         audit_data = {
             "row_idx": row_idx,
+            "row_index": row_idx,
             "nama_art": nama_art,
-            "assignment_id": assignment_id,
+            "nama_usaha": f"{nama_art} (Urut: {no_urut_kk}, NIK: {nik_val})",
             "no_urut_kk": no_urut_kk,
+            "nik_dtsen": nik_val,
             "nik": nik_val,
-            "no_kk": no_kk_val,
+            "nik_length": clean_id_str(nik_length_val),
+            "matched": clean_matched_str(matched_val),
             "url": raw_url,
+            "link_fasih": raw_url,
             "status": "PROSES",
             "keterangan": "",
             "timestamp": datetime.now().isoformat(),
@@ -762,17 +892,17 @@ class CleaningNIKR29Engine:
             "worker_id": worker_id,
             "status": "BUSY",
             "row_idx": row_idx,
-            "nama_usaha": f"{nama_art[:18]} (NIK: {nik_val[:10]}...)"
+            "nama_usaha": f"{nama_art[:18]} (Urut: {no_urut_kk})"
         })
 
         self.event_bus.emit("row_started", {
             "row_idx": row_idx,
-            "nama_usaha": nama_art,
+            "nama_usaha": f"{nama_art} (Urut: {no_urut_kk})",
             "url": raw_url,
             "worker_id": worker_id
         })
 
-        logger.bot(f"{w_tag}--- [Baris {row_idx}/{end_r}] Memproses NIK: {nama_art} (Urutan: {no_urut_kk}, NIK: {nik_val}) ---")
+        logger.bot(f"{w_tag}--- [Baris {row_idx}/{end_r}] Memproses NIK: {nama_art} (Urutan: {no_urut_kk}, NIK: {nik_val}, Matched: '{matched_val}') ---")
 
         reauth_count = 0
         max_reauth_attempts = 2
@@ -790,7 +920,7 @@ class CleaningNIKR29Engine:
                     if BrowserManager.is_session_expired(page) or not BrowserManager.is_page_logged_in(page):
                         raise SessionExpiredException(f"{w_tag}Sesi Fasih kedaluwarsa saat membuka form Baris {row_idx}")
 
-                    # STEP 2 & 3 & 4 & 5: Menuju Blok I & Cari Anggota Keluarga yang match Nama & No Urut
+                    # STEP 2: Buka Blok I & Cari Anggota Keluarga berdasarkan nama_dtsen lalu verifikasi no_urut_kk
                     if not self.check_pause_and_stop(row_idx, audit_data, worker_id=worker_id):
                         return
 
@@ -836,23 +966,44 @@ class CleaningNIKR29Engine:
                         })
                         return
 
-                    # STEP 6 & 7 & 8 & 9: Cek rincian NIK (nik_dtsen) vs Excel & Berikan Remarks '#3' jika sama
+                    # STEP 3: Cari elemen rincian NIK (nik_dtsen) dan input NIK
                     if not self.check_pause_and_stop(row_idx, audit_data, worker_id=worker_id):
                         return
 
-                    nik_cocok, web_nik_val, err_nik = _verify_and_remark_nik(
-                        page,
-                        excel_nik=nik_val,
+                    nik_box = page.locator(NIK_R29_SELECTORS["container_nik"]).first
+                    try:
+                        nik_box.wait_for(state="attached", timeout=25000)
+                        nik_box.scroll_into_view_if_needed(timeout=5000)
+                    except Exception:
+                        pass
+
+                    if nik_box.count() == 0:
+                        raise Exception("Elemen rincian NIK (id nik_dtsen) tidak ditemukan di form")
+
+                    inp_nik = nik_box.locator(NIK_R29_SELECTORS["input_nik"]).first
+                    try:
+                        inp_nik.wait_for(state="visible", timeout=15000)
+                    except PlaywrightTimeoutError:
+                        raise Exception("Field input NIK tidak visible di halaman formulir")
+
+                    # STEP 4: Jalankan aturan Cleaning NIK R29 (cek nik_dtsen di eform, lalu cek nik_matched & nik_length)
+                    nik_cleaning_ok, resulting_nik, ket_cleaning = _process_nik_r29_cleaning(
+                        page=page,
+                        nik_box=nik_box,
+                        inp_nik=inp_nik,
+                        excel_nik_dtsen=nik_val,
+                        excel_nik_length=nik_length_val,
+                        excel_matched=matched_val,
                         event_bus=self.event_bus,
                         worker_prefix=w_tag
                     )
 
-                    if not nik_cocok:
-                        # Jika NIK Beda -> Skip ke assignment selanjutnya dengan keterangan
-                        logger.warning(f"⚠️ {w_tag}Baris {row_idx} [{nama_art}]: {err_nik}. Melewati assignment.")
+                    if not nik_cleaning_ok:
+                        # Jika NIK beda atau aturan tidak cocok -> Skip ke assignment selanjutnya dengan keterangan
+                        logger.warning(f"⚠️ {w_tag}Baris {row_idx} [{nama_art}]: {ket_cleaning}. Melewati assignment.")
                         with self.excel_lock:
                             sheet.cell(row=row_idx, column=status_col).value = "DILEWATI"
-                            sheet.cell(row=row_idx, column=ket_col).value = err_nik[:150]
+                            sheet.cell(row=row_idx, column=ket_col).value = ket_cleaning[:150]
                             try:
                                 wb.save(self.excel_path)
                             except Exception:
@@ -864,13 +1015,13 @@ class CleaningNIKR29Engine:
                             current_proc = self.processed_count
 
                         audit_data["status"] = "DILEWATI"
-                        audit_data["keterangan"] = err_nik
+                        audit_data["keterangan"] = ket_cleaning
                         audit_logger.record_row(audit_data)
 
                         self.event_bus.emit("row_completed", {
                             "row_idx": row_idx,
                             "status": "⏭️ DILEWATI",
-                            "keterangan": err_nik[:100],
+                            "keterangan": ket_cleaning[:100],
                             "worker_id": worker_id
                         })
                         self.event_bus.emit("progress_updated", {
@@ -880,7 +1031,7 @@ class CleaningNIKR29Engine:
                         })
                         return
 
-                    # STEP 10: Lanjut pengecekan aktif tampilkan anomali di Blok Catatan sampai akhir submit
+                    # STEP 5: Lanjut submit form (Blok Catatan, cek anomali toggle, Kirim, Konfirmasi)
                     if not self.check_pause_and_stop(row_idx, audit_data, worker_id=worker_id):
                         return
 
@@ -894,10 +1045,13 @@ class CleaningNIKR29Engine:
                         worker_prefix=w_tag
                     )
 
+                    # Gabungkan ringkasan tindakan pembersihan NIK dan status submit
+                    ket_combined = f"{ket_cleaning} ({final_ket})" if sub_ok else final_ket
+
                     # Simpan hasil akhir ke Excel secara thread-safe
                     with self.excel_lock:
                         sheet.cell(row=row_idx, column=status_col).value = final_status
-                        sheet.cell(row=row_idx, column=ket_col).value = final_ket[:150]
+                        sheet.cell(row=row_idx, column=ket_col).value = ket_combined[:150]
                         try:
                             wb.save(self.excel_path)
                         except Exception as save_err:
@@ -912,14 +1066,14 @@ class CleaningNIKR29Engine:
                         current_proc = self.processed_count
 
                     audit_data["status"] = final_status
-                    audit_data["keterangan"] = final_ket
+                    audit_data["keterangan"] = ket_combined
                     audit_logger.record_row(audit_data)
 
                     badge_status = f"✅ {final_status}" if sub_ok else f"❌ {final_status}"
                     self.event_bus.emit("row_completed", {
                         "row_idx": row_idx,
                         "status": badge_status,
-                        "keterangan": final_ket[:100],
+                        "keterangan": ket_combined[:100],
                         "worker_id": worker_id
                     })
                     self.event_bus.emit("progress_updated", {
