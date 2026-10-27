@@ -7,7 +7,7 @@ from pathlib import Path
 # ==============================================================================
 
 APP_NAME = "FASIH 3603 Helper"
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.6.0"
 APP_SUBTITLE = "Suite Otomasi Survei & Sensus BPS Kabupaten Tangerang"
 APP_AUTHOR = "BPS Kabupaten Tangerang"
 
