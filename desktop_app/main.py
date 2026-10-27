@@ -22,6 +22,7 @@ from modules.approve_se2026.view import ApproveSE2026View
 from modules.remark_kbli.view import RemarkKBLIView
 from modules.kbli_sembako.view import KBLISembakoView
 from modules.kbli_pmm.view import KBLIPMMView
+from modules.kbli_kategori_A.view import KBLIKategoriAView, KBLIANonJasaView
 from modules.cleaning_nik_r30.view import CleaningNIKR30View, CleaningNIKView
 from modules.cleaning_nik_r29.view import CleaningNIKR29View
 from modules.cleaning_nik_r27.view import CleaningNIKR27View
@@ -261,6 +262,7 @@ class Fasih3603App(ctk.CTk):
         self._add_nav_item("remark_kbli", "🏷️ Remark KBLI SE2026", self._show_remark_kbli_view)
         self._add_nav_item("kbli_sembako", "🛒 KBLI Sembako SE2026", self._show_kbli_sembako_view)
         self._add_nav_item("kbli_pmm", "📦 KBLI PMM SE2026", self._show_kbli_pmm_view)
+        self._add_nav_item("kbli_kategori_A", "🌾 KBLI Kategori A SE2026", self._show_kbli_kategori_A_view)
         self._add_nav_item("cleaning_nik_r30", "🆔 Cleaning NIK R30 SE2026", self._show_cleaning_nik_r30_view)
         self._add_nav_item("cleaning_nik_r29", "🆔 Cleaning NIK R29 SE2026", self._show_cleaning_nik_r29_view)
         self._add_nav_item("cleaning_nik_r27", "🆔 Cleaning NIK R27 SE2026", self._show_cleaning_nik_r27_view)
@@ -281,6 +283,8 @@ class Fasih3603App(ctk.CTk):
         self.view_remark_kbli = RemarkKBLIView(self.container, EventBus())
         self.view_kbli_sembako = KBLISembakoView(self.container, EventBus())
         self.view_kbli_pmm = KBLIPMMView(self.container, EventBus())
+        self.view_kbli_kategori_A = KBLIKategoriAView(self.container, EventBus())
+        self.view_kbli_A_non_jasa = self.view_kbli_kategori_A  # Alias kompatibilitas
         self.view_cleaning_nik_r30 = CleaningNIKR30View(self.container, EventBus())
         self.view_cleaning_nik_r29 = CleaningNIKR29View(self.container, EventBus())
         self.view_cleaning_nik_r27 = CleaningNIKR27View(self.container, EventBus())
@@ -338,6 +342,12 @@ class Fasih3603App(ctk.CTk):
 
     def _show_kbli_pmm_view(self):
         self._switch_view(self.view_kbli_pmm, "kbli_pmm")
+
+    def _show_kbli_kategori_A_view(self):
+        self._switch_view(self.view_kbli_kategori_A, "kbli_kategori_A")
+
+    def _show_kbli_A_non_jasa_view(self):
+        self._show_kbli_kategori_A_view()
 
     def _show_cleaning_nik_r30_view(self):
         self._switch_view(self.view_cleaning_nik_r30, "cleaning_nik_r30")
@@ -550,10 +560,16 @@ class Fasih3603App(ctk.CTk):
             self.view_kbli_sembako._on_enter_pressed(event)
         elif hasattr(self, "view_cleaning_nik_r30") and self.current_view == self.view_cleaning_nik_r30:
             self.view_cleaning_nik_r30._on_enter_pressed(event)
+        elif hasattr(self, "view_cleaning_nik_r29") and self.current_view == self.view_cleaning_nik_r29:
+            self.view_cleaning_nik_r29._on_enter_pressed(event)
         elif hasattr(self, "view_cleaning_nik_r27") and self.current_view == self.view_cleaning_nik_r27:
             self.view_cleaning_nik_r27._on_enter_pressed(event)
         elif hasattr(self, "view_kbli_pmm") and self.current_view == self.view_kbli_pmm:
             self.view_kbli_pmm._on_enter_pressed(event)
+        elif hasattr(self, "view_kbli_kategori_A") and self.current_view == self.view_kbli_kategori_A:
+            self.view_kbli_kategori_A._on_enter_pressed(event)
+        elif hasattr(self, "view_kbli_A_non_jasa") and self.current_view == self.view_kbli_A_non_jasa:
+            self.view_kbli_A_non_jasa._on_enter_pressed(event)
 
     def _on_browser_changed(self, choice):
         b = str(choice).lower().strip()
@@ -634,7 +650,10 @@ class Fasih3603App(ctk.CTk):
             getattr(self, "view_remark_kbli", None),
             getattr(self, "view_kbli_sembako", None),
             getattr(self, "view_kbli_pmm", None),
+            getattr(self, "view_kbli_kategori_A", None),
+            getattr(self, "view_kbli_A_non_jasa", None),
             getattr(self, "view_cleaning_nik_r30", None),
+            getattr(self, "view_cleaning_nik_r29", None),
             getattr(self, "view_cleaning_nik_r27", None)
         ]
         for v in all_views:
