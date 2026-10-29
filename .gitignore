@@ -12,6 +12,7 @@ __pycache__/
 
 # 2. PyInstaller & Build Artifacts (Jangan upload folder dist ke repo git)
 desktop_app/build/pyinstaller_cache/
+desktop_app/build/FASIH_3603_Helper/
 desktop_app/dist/
 desktop_app/dist_installer/
 build/pyinstaller_cache/

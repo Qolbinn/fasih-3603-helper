@@ -2,16 +2,50 @@ import os
 import sys
 
 # ==============================================================================
-# COMPATIBILITY GUARD: NumPy 2.0+ & openpyxl (AttributeError: 'numpy' has no attribute 'short')
+# COMPATIBILITY GUARD: NumPy 2.x & openpyxl Compatibility Guard
 # ==============================================================================
-try:
-    import numpy as _np
-    if not hasattr(_np, 'short'):
-        _np.short = getattr(_np, 'int16', int)
-    if not hasattr(_np, 'ushort'):
-        _np.ushort = getattr(_np, 'uint16', int)
-except ImportError:
-    pass
+if getattr(sys, "frozen", False):
+    for _mod in ("numpy", "scipy", "pandas", "matplotlib"):
+        sys.modules[_mod] = None
+else:
+    try:
+        import numpy as _np
+        if _np is not None:
+            _type_map = {
+                'short': getattr(_np, 'int16', int),
+                'ushort': getattr(_np, 'uint16', int),
+                'intc': getattr(_np, 'int32', int),
+                'uintc': getattr(_np, 'uint32', int),
+                'int_': getattr(_np, 'int64', int),
+                'uint': getattr(_np, 'uint64', int),
+                'longlong': getattr(_np, 'int64', int),
+                'ulonglong': getattr(_np, 'uint64', int),
+                'half': getattr(_np, 'float16', float),
+                'float16': float,
+                'single': getattr(_np, 'float32', float),
+                'double': getattr(_np, 'float64', float),
+                'longdouble': getattr(_np, 'float64', float),
+                'int8': getattr(_np, 'int8', int),
+                'int16': getattr(_np, 'int16', int),
+                'int32': getattr(_np, 'int32', int),
+                'int64': getattr(_np, 'int64', int),
+                'uint8': getattr(_np, 'uint8', int),
+                'uint16': getattr(_np, 'uint16', int),
+                'uint32': getattr(_np, 'uint32', int),
+                'uint64': getattr(_np, 'uint64', int),
+                'intp': getattr(_np, 'int64', int),
+                'uintp': getattr(_np, 'uint64', int),
+                'float32': float,
+                'float64': float,
+                'bool_': bool,
+                'floating': float,
+                'integer': int,
+            }
+            for _k, _v in _type_map.items():
+                if not hasattr(_np, _k):
+                    setattr(_np, _k, _v)
+    except (ImportError, Exception):
+        pass
 
 from pathlib import Path
 
@@ -20,7 +54,7 @@ from pathlib import Path
 # ==============================================================================
 
 APP_NAME = "FASIH 3603 Helper"
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.0"
 APP_SUBTITLE = "Suite Otomasi Survei & Sensus BPS Kabupaten Tangerang"
 APP_AUTHOR = "BPS Kabupaten Tangerang"
 

@@ -48,6 +48,7 @@ KBLI_SELECTORS = {
     "sidebar_blok_catatan": "xpath=//div[contains(@class, 'fasih-form-sidebar')]//*[@title='CATATAN' or normalize-space(text())='CATATAN' or contains(text(), 'CATATAN')] | //*[@title='CATATAN' or normalize-space(text())='CATATAN']",
 
     # Rincian Kegiatan Utama
+    "container_keg_utama": "div[id^='keg_utama#'], div[id='keg_utama'], div[id^='kegiatan_utama#'], div[id='kegiatan_utama']",
     "field_kegiatan_utama": "div[id^='keg_utama#'] input[type='text'], div[id^='keg_utama#'] textarea, div[id*='keg_utama'] input",
 
     # Rincian KBLI GenAI (Radio Group)
