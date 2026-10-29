@@ -469,7 +469,7 @@ Aplikasi ini dilengkapi arsitektur pertahanan berlapis untuk menjamin kelancaran
 
 ### 1. Menjalankan via File Installer (Untuk Pengguna Umum / Non-Teknis)
 Anda **tidak memerlukan Python** di komputer Anda. Cukup unduh dan jalankan file installer resmi:
-* 📥 [FASIH_3603_Helper_Setup_v1.6.0.exe](file:///d:/3603%20BPS%20Kab%20Tangerang/2026/Sensus%20Ekonomi/Anomali/Fasih%203603%20Helper/desktop_app/dist_installer/FASIH_3603_Helper_Setup_v1.6.0.exe)
+* 📥 [FASIH_3603_Helper_Setup_v1.7.0.exe](file:///d:/3603%20BPS%20Kab%20Tangerang/2026/Sensus%20Ekonomi/Anomali/Fasih%203603%20Helper/desktop_app/dist_installer/FASIH_3603_Helper_Setup_v1.7.0.exe)
 * Ikuti petunjuk wizard instalasi. Shortcut aplikasi akan otomatis terpasang di Desktop dan Menu Start Windows.
 
 ### 2. Menjalankan di Lingkungan Pengembangan (Developer Mode)

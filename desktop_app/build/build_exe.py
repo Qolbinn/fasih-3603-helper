@@ -70,7 +70,7 @@ def build():
         "--hidden-import=modules.cleaning_nik_r27",
         "--hidden-import=modules.kbli_pmm",
         "--hidden-import=modules.kbli_kategori_A",
-        "--hidden-import=modules.kbli_A_non_jasa",
+        "--hidden-import=modules.kbli_air_11502",
         f"--workpath={str(BUILD_CACHE)}",
         f"--distpath={str(DIST_DIR)}",
         str(ROOT_DIR / "main.py")
