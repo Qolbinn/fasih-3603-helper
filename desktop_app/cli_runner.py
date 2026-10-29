@@ -1,5 +1,18 @@
 import os
 import sys
+
+# ==============================================================================
+# COMPATIBILITY GUARD: NumPy 2.0+ & openpyxl (AttributeError: 'numpy' has no attribute 'short')
+# ==============================================================================
+try:
+    import numpy as _np
+    if not hasattr(_np, 'short'):
+        _np.short = getattr(_np, 'int16', int)
+    if not hasattr(_np, 'ushort'):
+        _np.ushort = getattr(_np, 'uint16', int)
+except ImportError:
+    pass
+
 import argparse
 from pathlib import Path
 

@@ -25,13 +25,28 @@ def build():
         print("[Error] PyInstaller belum terpasang. Jalankan: pip install pyinstaller")
         return
 
-    # Bersihkan folder dist lama jika ada
+    # Bersihkan folder dist & cache lama jika ada
     if (DIST_DIR / "FASIH_3603_Helper").exists():
         print("[Build] Membersihkan folder dist lama...")
         try:
             shutil.rmtree(DIST_DIR / "FASIH_3603_Helper")
         except Exception as e:
             print(f"[Warning] Gagal membersihkan dist: {e}")
+
+    if BUILD_CACHE.exists():
+        print("[Build] Membersihkan folder cache build lama...")
+        try:
+            shutil.rmtree(BUILD_CACHE)
+        except Exception as e:
+            print(f"[Warning] Gagal membersihkan build cache: {e}")
+
+    old_build_dir = ROOT_DIR / "build" / "FASIH_3603_Helper"
+    if old_build_dir.exists():
+        print("[Build] Membersihkan folder build intermediate lama...")
+        try:
+            shutil.rmtree(old_build_dir)
+        except Exception as e:
+            print(f"[Warning] Gagal membersihkan build intermediate: {e}")
 
     # Temukan path customtkinter untuk menyertakan aset warna/tema
     import customtkinter
@@ -71,6 +86,10 @@ def build():
         "--hidden-import=modules.kbli_pmm",
         "--hidden-import=modules.kbli_kategori_A",
         "--hidden-import=modules.kbli_air_11502",
+        "--exclude-module=numpy",
+        "--exclude-module=scipy",
+        "--exclude-module=pandas",
+        "--exclude-module=matplotlib",
         f"--workpath={str(BUILD_CACHE)}",
         f"--distpath={str(DIST_DIR)}",
         str(ROOT_DIR / "main.py")
