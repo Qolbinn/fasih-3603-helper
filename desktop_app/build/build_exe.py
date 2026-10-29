@@ -86,6 +86,7 @@ def build():
         "--hidden-import=modules.kbli_pmm",
         "--hidden-import=modules.kbli_kategori_A",
         "--hidden-import=modules.kbli_air_11502",
+        f"--runtime-hook={str(ROOT_DIR / 'build' / 'pyi_rth_nonumpy.py')}",
         "--exclude-module=numpy",
         "--exclude-module=scipy",
         "--exclude-module=pandas",

@@ -10,6 +10,7 @@
     sidebar_container: ".fasih-form-sidebar, div[class*='sidebar']",
     sidebar_blok_ii: "xpath=//div[contains(@class, 'fasih-form-sidebar')]//*[@title='SE2026 - L BLOK II' or contains(@title, 'BLOK II') or contains(text(), 'BLOK II')] | //*[@title='SE2026 - L BLOK II' or contains(@title, 'BLOK II') or contains(text(), 'BLOK II')]",
     sidebar_ket_usaha: "xpath=//div[contains(@class, 'fasih-form-sidebar')]//div[@title='Keterangan Usaha/Perusahaan' or text()='Keterangan Usaha/Perusahaan']",
+    container_keg_utama: "div[id^='keg_utama#'], div[id='keg_utama'], div[id^='kegiatan_utama#'], div[id='kegiatan_utama']",
     field_kegiatan_utama: "div[id^='keg_utama#'] input[type='text'], div[id^='keg_utama#'] textarea, div[id*='keg_utama'] input, div[id^='kegiatan_utama#'] textarea, div[id^='kegiatan_utama#'] input, textarea#kegiatan_utama, input#kegiatan_utama",
     container_kbli_genai: "div[id^='kbli_genai#'], div[id='kbli_genai']",
     container_master_kbli: "div[id^='kbli#'], div[id='kbli']",
@@ -223,6 +224,13 @@
     // 2. Proses Verifikasi KBLI
     const stKbli = String(row.st_kbli || "").trim();
     const kbliBaru = String(row.kbli_baru || row.kbli_terbaru || "").trim();
+
+    // Memberikan catatan #3603 pada rincian Kegiatan Utama (keg_utama) sebelum flag comment KBLI
+    const containerKegUtama = FH.find(SELECTORS.container_keg_utama);
+    if (containerKegUtama) {
+      FH.log("info", "Memberikan catatan '#3603' pada rincian Kegiatan Utama (keg_utama)...");
+      await FH.addRemark(containerKegUtama, "#3603");
+    }
 
     const containerKbliGenai = await FH.waitFor(SELECTORS.container_kbli_genai, { timeout: 25000, state: "attached" });
 
