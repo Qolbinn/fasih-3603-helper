@@ -25,6 +25,13 @@ TOTAL_PENDAPATAN_BLN_SELECTOR = "div[id^='total_pendapatan_bln#'], div[id='total
 BLOK_II_XPATH = "xpath=//div[contains(@class, 'fasih-form-sidebar')]//*[@title='SE2026 - L BLOK II' or contains(@title, 'BLOK II') or contains(text(), 'BLOK II')] | //*[@title='SE2026 - L BLOK II' or contains(@title, 'BLOK II') or contains(text(), 'BLOK II')]"
 BLOK_CATATAN_XPATH = "xpath=//div[contains(@class, 'fasih-form-sidebar')]//*[@title='CATATAN' or normalize-space(text())='CATATAN' or contains(text(), 'CATATAN')] | //*[@title='CATATAN' or normalize-space(text())='CATATAN']"
 
+# Selector Revoke Assignment (Completed by Admin) & Edit Form
+REVOKE_BUTTON_SELECTOR = "button:has(svg.tabler-icon-rotate-clockwise), button:has(svg[class*='rotate-clockwise']), button:has(path[d*='M4.05 11'])"
+REVOKE_DIALOG_SELECTOR = "div[role='alertdialog']:has-text('Revoke Assignment'), div[role='alertdialog']:has-text('revoke assignment'), div[role='alertdialog']:has-text('Apakah Anda yakin ingin revoke')"
+REVOKE_CONFIRM_BUTTON_SELECTOR = "button:has-text('Konfirmasi')"
+EDIT_BUTTON_SELECTOR = "button:has(svg.tabler-icon-edit), button:has(svg[class*='tabler-icon-edit']), button:has(path[d*='M7 7h-1a2 2 0 0 0 -2 2v9']), button:has-text('Edit'), a:has-text('Edit')"
+
+
 # Selector Tombol Submit & Dialog Konfirmasi
 KIRIM_BUTTON_XPATH = "button#btn-kirim, button:has-text('Kirim')"
 CONFIRM_BUTTON_XPATH = "button:has-text('Konfirmasi'), button:has-text('Kirim')"

@@ -22,6 +22,10 @@ find_total_container = dc_engine.find_total_container
 check_has_existing_remark = dc_engine.check_has_existing_remark
 add_remarks_to_element = dc_engine.add_remarks_to_element
 ensure_anomali_switch_active = dc_engine.ensure_anomali_switch_active
+find_revoke_button = dc_engine.find_revoke_button
+find_edit_button = dc_engine.find_edit_button
+check_and_handle_revoke_assignment = dc_engine.check_and_handle_revoke_assignment
+ensure_form_mode_active = dc_engine.ensure_form_mode_active
 
 
 class TestDCUsaha3603Validator(unittest.TestCase):
@@ -400,6 +404,110 @@ class TestDCUsaha3603Playwright(unittest.TestCase):
         self.assertEqual(engine.done_session, 1)
         self.assertEqual(engine.success_count, 1)
 
+
+    def test_revoke_button_detection(self):
+        """Use Case 13: Deteksi tombol Revoke Assignment (tabler-icon-rotate-clockwise)"""
+        html = '''<!DOCTYPE html><html><body>
+        <button class="f:inline-flex f:items-center f:justify-center f:rounded-full f:shadow-md" data-state="closed">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tabler-icon tabler-icon-rotate-clockwise f:size-5">
+            <path d="M4.05 11a8 8 0 1 1 .5 4m-.5 5v-5h5"></path>
+          </svg>
+        </button>
+        </body></html>'''
+        self.page.set_content(html)
+        btn = find_revoke_button(self.page)
+        self.assertIsNotNone(btn)
+        self.assertTrue(btn.is_visible())
+
+    def test_edit_button_detection(self):
+        """Use Case 14: Deteksi tombol Edit Assignment (tabler-icon-edit)"""
+        html = '''<!DOCTYPE html><html><body>
+        <button class="f:inline-flex f:items-center f:justify-center f:rounded-full f:shadow-md" data-state="closed">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tabler-icon tabler-icon-edit f:size-5">
+            <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"></path>
+            <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415"></path>
+            <path d="M16 5l3 3"></path>
+          </svg>
+        </button>
+        </body></html>'''
+        self.page.set_content(html)
+        btn = find_edit_button(self.page)
+        self.assertIsNotNone(btn)
+        self.assertTrue(btn.is_visible())
+
+    def test_revoke_not_needed_when_no_button(self):
+        """Use Case 15: Penugasan normal tanpa tombol revoke -> return False"""
+        self.page.set_content("<!DOCTYPE html><html><body><div>Formulir Normal</div></body></html>")
+        res = check_and_handle_revoke_assignment(self.page)
+        self.assertFalse(res)
+
+    def test_revoke_assignment_flow_success(self):
+        """Use Case 16: Alur lengkap Revoke Assignment (Klik Revoke -> Konfirmasi -> Reload -> Tombol Edit Muncul)"""
+        html = '''<!DOCTYPE html><html><body>
+        <div id="container">
+          <button id="btn-revoke" class="f:inline-flex f:items-center f:justify-center f:rounded-full f:shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tabler-icon tabler-icon-rotate-clockwise f:size-5">
+              <path d="M4.05 11a8 8 0 1 1 .5 4m-.5 5v-5h5"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div role="alertdialog" id="revoke-dialog" style="display:none;">
+          <h2>Revoke Assignment?</h2>
+          <p>Apakah Anda yakin ingin revoke assignment ini?</p>
+          <button type="button" id="btn-batal">Batal</button>
+          <button type="button" id="btn-konfirm">Konfirmasi</button>
+        </div>
+
+        <script>
+          const btnRevoke = document.getElementById('btn-revoke');
+          const dialog = document.getElementById('revoke-dialog');
+          const btnKonfirm = document.getElementById('btn-konfirm');
+          const container = document.getElementById('container');
+
+          btnRevoke.addEventListener('click', () => {
+            dialog.style.display = 'block';
+          });
+
+          btnKonfirm.addEventListener('click', () => {
+            dialog.style.display = 'none';
+            container.innerHTML = `
+              <button id="btn-edit" class="f:inline-flex f:items-center f:justify-center f:rounded-full f:shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tabler-icon tabler-icon-edit f:size-5">
+                  <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"></path>
+                  <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415"></path>
+                  <path d="M16 5l3 3"></path>
+                </svg>
+              </button>
+            `;
+          });
+        </script>
+        </body></html>'''
+        self.page.set_content(html)
+        res = check_and_handle_revoke_assignment(self.page)
+        self.assertTrue(res)
+        btn_edit = find_edit_button(self.page)
+        self.assertIsNotNone(btn_edit)
+
+    def test_ensure_form_mode_active_clicks_edit(self):
+        """Use Case 17: ensure_form_mode_active mengklik tombol Edit jika tersedia"""
+        html = '''<!DOCTYPE html><html><body>
+        <button id="btn-edit" class="f:inline-flex f:items-center f:justify-center f:rounded-full f:shadow-md">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tabler-icon tabler-icon-edit f:size-5">
+            <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"></path>
+          </svg>
+        </button>
+        <script>
+          window.editClicked = false;
+          document.getElementById('btn-edit').addEventListener('click', () => {
+            window.editClicked = true;
+          });
+        </script>
+        </body></html>'''
+        self.page.set_content(html)
+        ensure_form_mode_active(self.page)
+        clicked = self.page.evaluate("() => window.editClicked")
+        self.assertTrue(clicked)
 
 if __name__ == "__main__":
     unittest.main()
