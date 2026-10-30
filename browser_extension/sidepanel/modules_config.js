@@ -155,6 +155,53 @@ window.MODULES_CONFIG = {
     ]
   },
 
+  dc_usaha_3603: {
+    id: "dc_usaha_3603",
+    name: "DC Usaha #3603",
+    badge: "🧹 DC Usaha #3603",
+    description: "Remarking total pengeluaran (#0) & total pendapatan (#3603) SE2026",
+    mandatoryKeys: ["url"],
+    columnAliases: {
+      assignment_id: ["assignment_id", "assignment id", "id_assignment", "id", "assignment", "no", "id penugasan"],
+      url: ["url", "link fasih sm", "link_fasih_sm", "link", "link fasih", "link_fasih", "tautan"],
+      nama_usaha: ["nama_usaha", "nama usaha", "nama perusahaan", "kegiatan_utama", "keg_utama"],
+      total_pengeluaran: ["total pengeluaran", "total_pengeluaran"],
+      total_pengeluaran_raw: ["total pengeluaran [raw]", "total pengeluaran raw", "total_pengeluaran_raw"],
+      total_pendapatan: ["total pendapatan", "total_pendapatan"],
+      total_pendapatan_raw: ["total pendapatan [raw]", "total pendapatan raw", "total_pendapatan_raw"],
+      total_aset: ["total aset", "total asset", "total_aset"],
+      total_aset_raw: ["total aset [raw]", "total aset raw", "total asset [raw]", "total asset raw", "total_aset_raw"],
+      upah_dan_gaji: ["upah dan gaji", "upah_dan_gaji", "upah & gaji", "total upah dan gaji", "gaji"],
+      biaya_produksi: ["biaya produksi", "biaya_produksi", "produksi"],
+      biaya_pembelian_barang_yang_terjual: ["biaya pembelian barang yang terjual", "biaya_pembelian_barang_yang_terjual", "biaya pembelian", "pembelian barang terjual"],
+      biaya_operasional: ["biaya operasional", "biaya_operasional", "operasional"],
+      biaya_non_operasional: ["biaya non operasional", "biaya_non_operasional", "biaya non-operasional", "non operasional"],
+      nilai_pendapatan_barang_dan_jasa: ["nilai pendapatan barang dan jasa", "nilai_pendapatan_barang_dan_jasa", "pendapatan barang dan jasa", "penjualan barang dan jasa"],
+      pendapatan_lainnya: ["pendapatan lainnya", "pendapatan_lainnya", "pendapatan lain"],
+      status: ["status_eksekusi", "status_proses", "status"],
+      keterangan: ["keterangan", "ket", "catatan_eksekusi"]
+    },
+    sampleData: [
+      {
+        assignment_id: "3603-DC-001",
+        url: "https://fasih-sm.bps.go.id/penugasan/detail/sample-dc-1",
+        nama_usaha: "BENGKEL MOTOR MAJU",
+        total_pengeluaran: 15000000,
+        total_pengeluaran_raw: 12000000,
+        total_pendapatan: 25000000,
+        total_pendapatan_raw: 25000000,
+        total_aset: 50000000,
+        total_aset_raw: 40000000,
+        upah_dan_gaji: 5000000,
+        biaya_produksi: 3000000,
+        biaya_operasional: 7000000,
+        nilai_pendapatan_barang_dan_jasa: 25000000,
+        status: "",
+        keterangan: ""
+      }
+    ]
+  },
+
   cleaning_nik_r30: {
     id: "cleaning_nik_r30",
     name: "Cleaning NIK R30 SE2026",

@@ -52,6 +52,7 @@
         "content/tasks/kbli_sembako.task.js",
         "content/tasks/kbli_pmm.task.js",
         "content/tasks/cleaning_usaha.task.js",
+        "content/tasks/dc_usaha_3603.task.js",
         "content/tasks/cleaning_nik_r30.task.js",
         "content/tasks/cleaning_nik_r27.task.js",
         "content/content_main.js"
