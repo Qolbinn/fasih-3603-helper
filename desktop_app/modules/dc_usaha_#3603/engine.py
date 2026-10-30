@@ -26,7 +26,11 @@ from .selectors import (
     CONFIRM_BUTTON_XPATH,
     RINGKASAN_KIRIM_SELECTOR,
     KONFIRMASI_KIRIM_BUTTON_SELECTOR,
-    SUCCESS_SUBMIT_DIALOG_SELECTOR
+    SUCCESS_SUBMIT_DIALOG_SELECTOR,
+    REVOKE_BUTTON_SELECTOR,
+    REVOKE_DIALOG_SELECTOR,
+    REVOKE_CONFIRM_BUTTON_SELECTOR,
+    EDIT_BUTTON_SELECTOR
 )
 from .validator import ExcelValidator
 
@@ -350,6 +354,133 @@ def ensure_anomali_switch_active(page, event_bus=None, wait_timeout=35000, worke
 
     raise Exception("Gagal mengaktifkan toggle Tampilkan Anomali Usaha dan Keluarga.")
 
+def find_revoke_button(page):
+    """Mencari tombol Revoke Assignment (berisi svg tabler-icon-rotate-clockwise)."""
+    try:
+        btn = page.locator(REVOKE_BUTTON_SELECTOR).first
+        if btn.count() > 0 and btn.is_visible():
+            return btn
+        btn_xp = page.locator("xpath=//button[.//svg[contains(@class, 'tabler-icon-rotate-clockwise')] or .//*[name()='path' and contains(@d, 'M4.05 11')]]").first
+        if btn_xp.count() > 0 and btn_xp.is_visible():
+            return btn_xp
+    except Exception:
+        pass
+    return None
+
+def find_edit_button(page):
+    """Mencari tombol Edit Assignment (berisi svg tabler-icon-edit)."""
+    try:
+        btn = page.locator(EDIT_BUTTON_SELECTOR).first
+        if btn.count() > 0 and btn.is_visible():
+            return btn
+        btn_xp = page.locator("xpath=//button[.//svg[contains(@class, 'tabler-icon-edit')] or .//*[name()='path' and contains(@d, 'M7 7h-1a2 2 0 0 0 -2 2v9')]]").first
+        if btn_xp.count() > 0 and btn_xp.is_visible():
+            return btn_xp
+    except Exception:
+        pass
+    return None
+
+def check_and_handle_revoke_assignment(page, event_bus=None, worker_prefix=""):
+    """
+    Pengecekan status penugasan apakah sudah di-completed oleh admin.
+    Tahapan Revoke:
+    1. Cek apakah ada tombol revoke (ikon tabler-icon-rotate-clockwise).
+    2. Klik tombol tsb, akan muncul pop up dialog konfirmasi revoke ("Revoke Assignment?").
+    3. Klik konfirmasi untuk revoke.
+    4. Tunggu respons dari server, nanti ketika berhasil halaman akan di-load ulang.
+    5. Cek kalau sudah berhasil di-revoke: saat halaman sudah di-load ulang, nanti akan ada tombol edit.
+    Mengembalikan True jika penugasan berhasil di-revoke, False jika tidak ada tombol revoke.
+    """
+    btn_revoke = find_revoke_button(page)
+    if not btn_revoke:
+        try:
+            page.locator(REVOKE_BUTTON_SELECTOR).first.wait_for(state="visible", timeout=2500)
+            btn_revoke = find_revoke_button(page)
+        except Exception:
+            pass
+
+    if not btn_revoke:
+        return False
+
+    logger.warning(f"⚠️ {worker_prefix}Penugasan terdeteksi berstatus COMPLETED oleh admin. Memulai proses Revoke Assignment...")
+
+    # Langkah 2: Klik tombol revoke
+    safe_click(page, btn_revoke, timeout=10000, event_bus=event_bus)
+    random_sleep(0.8, 1.4, event_bus=event_bus)
+
+    # Langkah 3: Tunggu pop up dialog konfirmasi revoke
+    dialog = page.locator(REVOKE_DIALOG_SELECTOR).first
+    try:
+        dialog.wait_for(state="visible", timeout=15000)
+    except PlaywrightTimeoutError:
+        raise Exception("Pop-up dialog konfirmasi Revoke Assignment tidak muncul setelah tombol Revoke diklik.")
+
+    btn_konfirmasi = dialog.locator(REVOKE_CONFIRM_BUTTON_SELECTOR).first
+    if btn_konfirmasi.count() == 0:
+        raise Exception("Tombol 'Konfirmasi' pada pop-up dialog Revoke Assignment tidak ditemukan.")
+
+    logger.bot(f"{worker_prefix}Mengonfirmasi Revoke Assignment pada pop-up dialog...")
+    safe_click(page, btn_konfirmasi, timeout=10000, event_bus=event_bus)
+
+    # Langkah 4: Tunggu respons dari server, nanti ketika berhasil halaman akan di load ulang
+    logger.bot(f"{worker_prefix}Menunggu respons server dan pemuatan ulang halaman pasca-revoke...")
+    try:
+        dialog.wait_for(state="hidden", timeout=15000)
+    except Exception:
+        pass
+
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=25000)
+    except Exception:
+        pass
+    random_sleep(2.0, 3.5, event_bus=event_bus)
+
+    # Langkah 5: Cek kalau sudah berhasil di-revoke: saat halaman sudah di-load ulang, nanti akan ada tombol edit
+    logger.bot(f"{worker_prefix}Memeriksa status pasca-reload: menunggu keberadaan tombol Edit (maks 60 detik)...")
+    btn_edit = None
+    form_active = False
+    start_time = time.time()
+    max_wait_sec = 60
+
+    while time.time() - start_time < max_wait_sec:
+        btn_edit = find_edit_button(page)
+        if btn_edit:
+            break
+
+        # Alternatif: Jika halaman langsung me-reload ke mode formulir / sidebar aktif
+        try:
+            sidebar = page.locator(".fasih-form-sidebar, div[class*='sidebar'], button#btn-kirim").first
+            if sidebar.count() > 0 and sidebar.is_visible():
+                form_active = True
+                logger.bot(f"{worker_prefix}Formulir kuesioner langsung aktif pasca-reload.")
+                break
+        except Exception:
+            pass
+
+        elapsed = int(time.time() - start_time)
+        if elapsed > 0 and elapsed % 15 == 0:
+            logger.bot(f"{worker_prefix}Masih menunggu server memuat ulang halaman ({elapsed}s/{max_wait_sec}s)...")
+
+        random_sleep(0.8, 1.2, event_bus=event_bus, allow_hesitation=False)
+
+    if not btn_edit and not form_active:
+        raise Exception("Gagal memverifikasi status Revoke: Tombol Edit tidak muncul setelah halaman dimuat ulang.")
+
+    logger.success(f"🎉 {worker_prefix}Revoke Assignment BERHASIL! {'Tombol Edit terdeteksi.' if btn_edit else 'Formulir kuesioner aktif.'}")
+    return True
+
+def ensure_form_mode_active(page, event_bus=None, worker_prefix=""):
+    """
+    Jika pada halaman penugasan terdapat tombol Edit (misal pasca revoke atau membuka detail),
+    klik tombol Edit tersebut untuk masuk ke pengisian formulir kuesioner.
+    """
+    btn_edit = find_edit_button(page)
+    if btn_edit:
+        logger.bot(f"{worker_prefix}Tombol Edit terdeteksi. Mengklik tombol Edit untuk membuka formulir kuesioner...")
+        safe_click(page, btn_edit, timeout=15000, event_bus=event_bus)
+        random_sleep(1.8, 2.8, event_bus=event_bus)
+
+
 class SessionExpiredException(Exception):
     """Exception khusus saat sesi login Fasih terdeteksi expired di tengah proses."""
     pass
@@ -559,9 +690,9 @@ class DataCleaningEngine:
             logger.warning(f"{worker_prefix}Peringatan goto: {e_goto}. Mencoba menunggu networkidle...")
         random_sleep(1.5, 2.5, event_bus=self.event_bus)
 
-        # Tunggu container formulir atau sidebar siap
+        # Tunggu container formulir atau sidebar siap (atau tombol aksi Revoke / Edit pada assignment)
         try:
-            page.locator(".fasih-form-sidebar, div[class*='sidebar'], button#btn-kirim, button:has-text('Kirim')").first.wait_for(state="attached", timeout=45000)
+            page.locator(".fasih-form-sidebar, div[class*='sidebar'], button#btn-kirim, button:has-text('Kirim'), button:has(svg.tabler-icon-rotate-clockwise), button:has(svg.tabler-icon-edit)").first.wait_for(state="attached", timeout=45000)
         except Exception:
             pass
 
@@ -654,6 +785,21 @@ class DataCleaningEngine:
 
                     if BrowserManager.is_session_expired(page) or not BrowserManager.is_page_logged_in(page):
                         raise SessionExpiredException("Sesi login Fasih tidak aktif atau kedaluwarsa saat membuka formulir.")
+
+                    # STEP 1.1: Pengecekan Status Assignment (Revoke jika Completed by Admin)
+                    if not self.check_pause_and_stop(row_idx, audit_data, worker_id):
+                        return
+
+                    did_revoke = check_and_handle_revoke_assignment(page, event_bus=self.event_bus, worker_prefix=w_tag)
+                    if did_revoke:
+                        # Langkah 6: Jika sudah berhasil revoke, ulangi saja step automation dari awal saat mengunjungi url
+                        logger.bot(f"{w_tag}Assignment berhasil di-revoke. Mengulangi alur otomasi dari awal kunjungan URL...")
+                        self._navigate_assignment_page(page, raw_url, row_idx=row_idx, nama_usaha=nama_usaha, worker_prefix=w_tag)
+                        if not self.check_pause_and_stop(row_idx, audit_data, worker_id):
+                            return
+
+                    # Pastikan mode formulir aktif (klik tombol Edit jika ada)
+                    ensure_form_mode_active(page, event_bus=self.event_bus, worker_prefix=w_tag)
 
                     # STEP 2: Buka Sub Sidebar Blok II / Nama Usaha
                     if not self.check_pause_and_stop(row_idx, audit_data, worker_id):

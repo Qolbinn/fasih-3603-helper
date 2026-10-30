@@ -98,6 +98,99 @@
     return { hasRemark: false, text: "" };
   }
 
+  // Pengecekan Tombol Revoke & Edit Assignment
+  function findRevokeButton() {
+    const sel = "button:has(svg.tabler-icon-rotate-clockwise), button:has(svg[class*='rotate-clockwise']), button:has(path[d*='M4.05 11'])";
+    try {
+      const btn = document.querySelector(sel);
+      if (btn && FH.isVisible(btn)) return btn;
+    } catch (e) {}
+    for (const b of document.querySelectorAll("button")) {
+      if (b.querySelector("svg.tabler-icon-rotate-clockwise, svg[class*='rotate-clockwise'], path[d*='M4.05 11']")) {
+        if (FH.isVisible(b)) return b;
+      }
+    }
+    return null;
+  }
+
+  function findEditButton() {
+    const sel = "button:has(svg.tabler-icon-edit), button:has(svg[class*='tabler-icon-edit']), button:has(path[d*='M7 7h-1a2 2 0 0 0 -2 2v9'])";
+    try {
+      const btn = document.querySelector(sel);
+      if (btn && FH.isVisible(btn)) return btn;
+    } catch (e) {}
+    for (const b of document.querySelectorAll("button, a")) {
+      if (b.querySelector("svg.tabler-icon-edit, svg[class*='tabler-icon-edit'], path[d*='M7 7h-1a2 2 0 0 0 -2 2v9']")) {
+        if (FH.isVisible(b)) return b;
+      }
+    }
+    return null;
+  }
+
+  async function checkAndHandleRevokeAssignment() {
+    let btnRevoke = findRevokeButton();
+    if (!btnRevoke) {
+      await FH.randomSleep(0.5, 1.0);
+      btnRevoke = findRevokeButton();
+    }
+    if (!btnRevoke) return false;
+
+    FH.log("warn", "Penugasan terdeteksi berstatus COMPLETED oleh admin. Memulai proses Revoke Assignment...");
+    await FH.humanClick(btnRevoke);
+    await FH.randomSleep(0.8, 1.4);
+
+    const dialogRevoke = await FH.waitFor("div[role='alertdialog']:has-text('Revoke Assignment'), div[role='alertdialog']:has-text('Apakah Anda yakin ingin revoke')", { timeout: 15000 });
+    if (!dialogRevoke) {
+      throw new Error("Pop-up dialog konfirmasi Revoke Assignment tidak muncul setelah tombol Revoke diklik.");
+    }
+
+    const btnKonfirmasi = FH.find("button:has-text('Konfirmasi')", dialogRevoke);
+    if (!btnKonfirmasi) {
+      throw new Error("Tombol 'Konfirmasi' pada pop-up dialog Revoke Assignment tidak ditemukan.");
+    }
+
+    FH.log("info", "Mengonfirmasi Revoke Assignment pada pop-up dialog...");
+    await FH.humanClick(btnKonfirmasi);
+
+    FH.log("info", "Menunggu respons server dan pemuatan ulang halaman pasca-revoke...");
+    await FH.randomSleep(3.0, 5.0);
+
+    let btnEdit = null;
+    let formActive = false;
+    for (let i = 0; i < 60; i++) {
+      btnEdit = findEditButton();
+      if (btnEdit) break;
+
+      const sidebarEl = document.querySelector(".fasih-form-sidebar, div[class*='sidebar'], button#btn-kirim");
+      if (sidebarEl && FH.isVisible(sidebarEl)) {
+        formActive = true;
+        FH.log("info", "Formulir kuesioner langsung aktif pasca-reload.");
+        break;
+      }
+
+      if (i > 0 && i % 15 === 0) {
+        FH.log("info", `Masih menunggu server memuat ulang halaman (${i}s/60s)...`);
+      }
+      await FH.randomSleep(0.8, 1.2);
+    }
+
+    if (!btnEdit && !formActive) {
+      throw new Error("Gagal memverifikasi status Revoke: Tombol Edit tidak muncul setelah halaman dimuat ulang.");
+    }
+
+    FH.log("info", "Revoke Assignment BERHASIL! Tombol Edit terdeteksi.");
+    return true;
+  }
+
+  async function clickEditIfPresent() {
+    const btnEdit = findEditButton();
+    if (btnEdit) {
+      FH.log("info", "Tombol Edit terdeteksi. Mengklik tombol Edit untuk membuka formulir...");
+      await FH.humanClick(btnEdit);
+      await FH.randomSleep(1.8, 2.5);
+    }
+  }
+
   // Buka Sub Sidebar Blok II / Nama Usaha
   async function openMatchingUsaha(usahaName) {
     await FH.waitFor(SELECTORS.sidebar_container, { timeout: 35000 });
@@ -226,6 +319,15 @@
   FH.tasks.dc_usaha_3603 = async function (row, options = {}) {
     const { debugReview = false } = options;
     FH.log("info", `[DC Usaha #3603] Memulai baris: Assignment '${row.assignment_id || "-"}' - Usaha: '${row.nama_usaha || "-"}'...`);
+
+    // STEP 0: Pengecekan Status Assignment (Revoke jika Completed by Admin)
+    const didRevoke = await checkAndHandleRevokeAssignment();
+    if (didRevoke) {
+      FH.log("info", "Assignment berhasil di-revoke. Membuka formulir kuesioner...");
+      await clickEditIfPresent();
+    } else {
+      await clickEditIfPresent();
+    }
 
     // STEP 1 & 2: Buka Sub Sidebar Blok II / Nama Usaha jika ada
     const usahaName = row.nama_usaha || row.kegiatan_utama || row.keg_utama || "";
