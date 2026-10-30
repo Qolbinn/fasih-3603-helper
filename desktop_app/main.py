@@ -65,6 +65,8 @@ from core.logger import logger
 from core.event_bus import EventBus
 from core.browser_manager import BrowserManager
 from modules.cleaning_usaha.view import CleaningUsahaView, DataCleaningView
+import importlib
+DCUsaha3603View = importlib.import_module("modules.dc_usaha_#3603.view").DCUsaha3603View
 from modules.approve_se2026.view import ApproveSE2026View
 from modules.remark_kbli.view import RemarkKBLIView
 from modules.kbli_sembako.view import KBLISembakoView
@@ -307,6 +309,7 @@ class Fasih3603App(ctk.CTk):
         self.nav_buttons = {}
         self._add_nav_item("beranda", "🏠 Beranda & Panduan", self._show_home_view)
         self._add_nav_item("cleaning_usaha", "🧹 Cleaning Usaha SE2026", self._show_cleaning_usaha_view)
+        self._add_nav_item("dc_usaha_3603", "🧹 DC Usaha #3603", self._show_dc_usaha_3603_view)
         self._add_nav_item("remark_kbli", "🏷️ Remark KBLI SE2026", self._show_remark_kbli_view)
         self._add_nav_item("kbli_sembako", "🛒 KBLI Sembako SE2026", self._show_kbli_sembako_view)
         self._add_nav_item("kbli_pmm", "📦 KBLI PMM SE2026", self._show_kbli_pmm_view)
@@ -329,6 +332,7 @@ class Fasih3603App(ctk.CTk):
 
         # Modul views cache dengan EventBus terisolasi per modul
         self.view_cleaning_usaha = CleaningUsahaView(self.container, EventBus())
+        self.view_dc_usaha_3603 = DCUsaha3603View(self.container, EventBus())
         self.view_remark_kbli = RemarkKBLIView(self.container, EventBus())
         self.view_kbli_sembako = KBLISembakoView(self.container, EventBus())
         self.view_kbli_pmm = KBLIPMMView(self.container, EventBus())
@@ -381,6 +385,9 @@ class Fasih3603App(ctk.CTk):
 
     def _show_cleaning_usaha_view(self):
         self._switch_view(self.view_cleaning_usaha, "cleaning_usaha")
+
+    def _show_dc_usaha_3603_view(self):
+        self._switch_view(self.view_dc_usaha_3603, "dc_usaha_3603")
 
     def _show_cleaning_view(self):
         self._show_cleaning_usaha_view()
@@ -611,6 +618,8 @@ class Fasih3603App(ctk.CTk):
     def _on_global_enter(self, event=None):
         if hasattr(self, "view_cleaning_usaha") and self.current_view == self.view_cleaning_usaha:
             self.view_cleaning_usaha._on_enter_pressed(event)
+        elif hasattr(self, "view_dc_usaha_3603") and self.current_view == self.view_dc_usaha_3603:
+            self.view_dc_usaha_3603._on_enter_pressed(event)
         elif hasattr(self, "view_remark_kbli") and self.current_view == self.view_remark_kbli:
             self.view_remark_kbli._on_enter_pressed(event)
         elif hasattr(self, "view_kbli_sembako") and self.current_view == self.view_kbli_sembako:
@@ -708,6 +717,7 @@ class Fasih3603App(ctk.CTk):
         running_views = []
         all_views = [
             getattr(self, "view_cleaning_usaha", None),
+            getattr(self, "view_dc_usaha_3603", None),
             getattr(self, "view_remark_kbli", None),
             getattr(self, "view_kbli_sembako", None),
             getattr(self, "view_kbli_pmm", None),
